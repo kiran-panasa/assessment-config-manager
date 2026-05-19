@@ -1,4 +1,10 @@
 import { useState, useEffect } from "react";
+import { db } from "./firebase";
+import {
+  collection, doc, addDoc, updateDoc, deleteDoc,
+  setDoc, getDoc, onSnapshot, serverTimestamp,
+  arrayUnion, arrayRemove,
+} from "firebase/firestore";
 
 const DEFAULT_SKILLS = [
   "Applied Gen AI Development",
@@ -13,7 +19,6 @@ const DEFAULT_SKILLS = [
 ];
 
 const DEFAULT_LEVELS = ["L1", "L2", "L3"];
-const STORAGE_KEY = "assessment-config-data";
 
 function Toast({ message, type, onDone }) {
   useEffect(() => {
@@ -63,9 +68,7 @@ function StudentBookings({ S }) {
         <table style={S.table}>
           <thead>
             <tr>
-              {columns.map(col => (
-                <th key={col} style={S.th}>{col}</th>
-              ))}
+              {columns.map(col => <th key={col} style={S.th}>{col}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -89,8 +92,8 @@ export default function App() {
   const [skills, setSkills] = useState(DEFAULT_SKILLS);
   const [levels, setLevels] = useState(DEFAULT_LEVELS);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState("assessments"); // assessments | bookings
-  const [tab, setTab] = useState("entry"); // entry | manage | settings
+  const [page, setPage] = useState("assessments");
+  const [tab, setTab] = useState("entry");
   const [toast, setToast] = useState(null);
 
   const [selSkill, setSelSkill] = useState("");
@@ -106,34 +109,51 @@ export default function App() {
 
   const showToast = (message, type = "success") => setToast({ message, type });
 
+  const formatDate = (ts) => {
+    if (!ts) return "—";
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  };
+
+  const writeLog = (action, details = {}) =>
+    addDoc(collection(db, "logs"), { action, ...details, timestamp: serverTimestamp() }).catch(() => {});
+
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const data = JSON.parse(raw);
-        if (data.assessments) setAssessments(data.assessments);
+    const configRef = doc(db, "config", "main");
+
+    getDoc(configRef).then(snap => {
+      if (!snap.exists()) {
+        setDoc(configRef, { skills: DEFAULT_SKILLS, levels: DEFAULT_LEVELS });
+      }
+    });
+
+    const unsubAssessments = onSnapshot(
+      collection(db, "assessments"),
+      (snap) => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        data.sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
+        setAssessments(data);
+        setLoading(false);
+      },
+      () => setLoading(false),
+    );
+
+    const unsubConfig = onSnapshot(configRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
         if (data.skills) setSkills(data.skills);
         if (data.levels) setLevels(data.levels);
       }
-    } catch (_) {}
-    setLoading(false);
-  }, []);
+    });
 
-  const persist = (newAssessments, newSkills, newLevels) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        assessments: newAssessments ?? assessments,
-        skills: newSkills ?? skills,
-        levels: newLevels ?? levels,
-      }));
-    } catch (_) {}
-  };
+    return () => { unsubAssessments(); unsubConfig(); };
+  }, []);
 
   const isValidUrl = (url) => {
     try { new URL(url); return true; } catch { return false; }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selSkill || !selLevel || !configUrl.trim()) {
       showToast("Fill in all fields.", "error"); return;
     }
@@ -147,24 +167,26 @@ export default function App() {
       showToast(`${selSkill} - ${selLevel} already exists.`, "error"); return;
     }
 
-    let updated;
-    if (editId) {
-      updated = assessments.map(a =>
-        a.id === editId ? { ...a, skill: selSkill, level: selLevel, url: configUrl.trim() } : a
-      );
-      showToast("Assessment updated.");
-    } else {
-      updated = [...assessments, {
-        id: Date.now().toString(),
-        skill: selSkill, level: selLevel,
-        url: configUrl.trim(),
-        createdAt: new Date().toISOString(),
-      }];
-      showToast("Assessment saved.");
+    try {
+      if (editId) {
+        await updateDoc(doc(db, "assessments", editId), {
+          skill: selSkill, level: selLevel, url: configUrl.trim(),
+        });
+        writeLog("updated", { assessmentId: editId, skill: selSkill, level: selLevel, url: configUrl.trim() });
+        showToast("Assessment updated.");
+      } else {
+        const ref = await addDoc(collection(db, "assessments"), {
+          skill: selSkill, level: selLevel,
+          url: configUrl.trim(),
+          createdAt: serverTimestamp(),
+        });
+        writeLog("created", { assessmentId: ref.id, skill: selSkill, level: selLevel, url: configUrl.trim() });
+        showToast("Assessment saved.");
+      }
+      setSelSkill(""); setSelLevel(""); setConfigUrl(""); setEditId(null);
+    } catch {
+      showToast("Failed to save. Try again.", "error");
     }
-    setAssessments(updated);
-    persist(updated, null, null);
-    setSelSkill(""); setSelLevel(""); setConfigUrl(""); setEditId(null);
   };
 
   const handleEdit = (a) => {
@@ -172,43 +194,61 @@ export default function App() {
     setEditId(a.id); setTab("entry");
   };
 
-  const handleDelete = (id) => {
-    const updated = assessments.filter(a => a.id !== id);
-    setAssessments(updated);
-    persist(updated, null, null);
-    showToast("Deleted.");
+  const handleDelete = async (id) => {
+    const assessment = assessments.find(a => a.id === id);
+    try {
+      await deleteDoc(doc(db, "assessments", id));
+      writeLog("deleted", { assessmentId: id, skill: assessment?.skill, level: assessment?.level });
+      showToast("Deleted.");
+    } catch {
+      showToast("Failed to delete.", "error");
+    }
   };
 
-  const handleAddSkill = () => {
+  const handleAddSkill = async () => {
     const s = newSkill.trim();
     if (!s || skills.includes(s)) { showToast("Skill already exists or empty.", "error"); return; }
-    const updated = [...skills, s];
-    setSkills(updated); setNewSkill("");
-    persist(null, updated, null);
-    showToast("Skill added.");
+    try {
+      await updateDoc(doc(db, "config", "main"), { skills: arrayUnion(s) });
+      writeLog("skill_added", { skill: s });
+      setNewSkill("");
+      showToast("Skill added.");
+    } catch {
+      showToast("Failed to add skill.", "error");
+    }
   };
 
-  const handleRemoveSkill = (s) => {
-    const updated = skills.filter(x => x !== s);
-    setSkills(updated);
-    persist(null, updated, null);
-    showToast("Skill removed.");
+  const handleRemoveSkill = async (s) => {
+    try {
+      await updateDoc(doc(db, "config", "main"), { skills: arrayRemove(s) });
+      writeLog("skill_removed", { skill: s });
+      showToast("Skill removed.");
+    } catch {
+      showToast("Failed to remove skill.", "error");
+    }
   };
 
-  const handleAddLevel = () => {
+  const handleAddLevel = async () => {
     const l = newLevel.trim().toUpperCase();
     if (!l || levels.includes(l)) { showToast("Level exists or empty.", "error"); return; }
-    const updated = [...levels, l];
-    setLevels(updated); setNewLevel("");
-    persist(null, null, updated);
-    showToast("Level added.");
+    try {
+      await updateDoc(doc(db, "config", "main"), { levels: arrayUnion(l) });
+      writeLog("level_added", { level: l });
+      setNewLevel("");
+      showToast("Level added.");
+    } catch {
+      showToast("Failed to add level.", "error");
+    }
   };
 
-  const handleRemoveLevel = (l) => {
-    const updated = levels.filter(x => x !== l);
-    setLevels(updated);
-    persist(null, null, updated);
-    showToast("Level removed.");
+  const handleRemoveLevel = async (l) => {
+    try {
+      await updateDoc(doc(db, "config", "main"), { levels: arrayRemove(l) });
+      writeLog("level_removed", { level: l });
+      showToast("Level removed.");
+    } catch {
+      showToast("Failed to remove level.", "error");
+    }
   };
 
   const filtered = assessments.filter(a =>
@@ -387,7 +427,6 @@ export default function App() {
       transition: "opacity 0.15s",
     }),
     grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 },
-    grid3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 },
     sectionTitle: {
       fontFamily: "'Syne', sans-serif",
       fontWeight: 800,
@@ -462,7 +501,7 @@ export default function App() {
 
   if (loading) return (
     <div style={{ ...S.root, alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
-      <span style={{ color: "#555a7a", fontFamily: "'Syne', sans-serif", fontSize: 14 }}>Loading...</span>
+      <span style={{ color: "#555a7a", fontFamily: "'Syne', sans-serif", fontSize: 14 }}>Connecting to database...</span>
     </div>
   );
 
@@ -479,10 +518,9 @@ export default function App() {
         <nav style={S.sidebarNav}>
           {NAV_ITEMS.map(({ key, label, Icon }) => {
             const active = page === key;
-            const color = active ? "#fff" : "#555a7a";
             return (
               <button key={key} style={S.sidebarItem(active)} onClick={() => setPage(key)}>
-                <Icon color={color} />
+                <Icon color={active ? "#fff" : "#555a7a"} />
                 {label}
               </button>
             );
@@ -493,7 +531,6 @@ export default function App() {
       {/* Main content */}
       <div style={S.main}>
 
-        {/* Assessment Configurations page */}
         {page === "assessments" && (
           <>
             <div style={S.header}>
@@ -682,7 +719,7 @@ export default function App() {
                             <tr key={a.id} style={{ transition: "background 0.1s" }}
                               onMouseEnter={e => e.currentTarget.style.background = "#1a1b24"}
                               onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                              <td style={S.td} title={a.skill}>{a.skill}</td>
+                              <td style={S.td}>{a.skill}</td>
                               <td style={S.td}><span style={S.badge()}>{a.level}</span></td>
                               <td style={{ ...S.td, maxWidth: 320 }}>
                                 <a href={a.url} target="_blank" rel="noreferrer"
@@ -691,7 +728,7 @@ export default function App() {
                                 </a>
                               </td>
                               <td style={{ ...S.td, fontSize: 11, color: "#555a7a", whiteSpace: "nowrap" }}>
-                                {a.createdAt ? new Date(a.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                                {formatDate(a.createdAt)}
                               </td>
                               <td style={{ ...S.td, whiteSpace: "nowrap" }}>
                                 <div style={{ display: "flex", gap: 8 }}>
@@ -769,7 +806,6 @@ export default function App() {
           </>
         )}
 
-        {/* Student Bookings page */}
         {page === "bookings" && (
           <div style={S.body}>
             <StudentBookings S={S} />
