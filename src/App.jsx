@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { db } from "./firebase";
+import CreateAssessments from "./CreateAssessments";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
   setDoc, getDoc, onSnapshot, serverTimestamp,
@@ -199,6 +200,12 @@ const IconBookings = ({ color }) => (
     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
     <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
     <line x1="3" y1="10" x2="21" y2="10" />
+  </svg>
+);
+
+const IconCreate = ({ color }) => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="5 3 19 12 5 21 5 3" />
   </svg>
 );
 
@@ -776,7 +783,8 @@ export default function App() {
 
   const NAV_ITEMS = [
     { key: "assessments", label: "Assessment Configurations", Icon: IconAssessment },
-    { key: "bookings", label: "Student Bookings", Icon: IconBookings },
+    { key: "bookings",    label: "Student Bookings",          Icon: IconBookings },
+    { key: "create",      label: "Create Assessments",        Icon: IconCreate },
   ];
 
   if (loading) return (
@@ -992,6 +1000,15 @@ export default function App() {
             bookingRows={bookingRows}
             examSessions={examSessions}
             writeLog={writeLog}
+            showToast={showToast}
+          />
+        )}
+
+        {page === "create" && (
+          <CreateAssessments
+            S={S}
+            examSessions={examSessions}
+            bookingRows={bookingRows}
             showToast={showToast}
           />
         )}
