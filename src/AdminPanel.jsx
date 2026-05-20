@@ -14,8 +14,8 @@ const ALL_PAGES = [
 ];
 
 const labelStyle = {
-  fontSize: 11, fontFamily: "'Syne', sans-serif", fontWeight: 700,
-  letterSpacing: "0.12em", color: "#555a7a", textTransform: "uppercase",
+  fontSize: 11, fontFamily: "'Inter', sans-serif", fontWeight: 700,
+  letterSpacing: "0.06em", color: "#64748b", textTransform: "uppercase",
   marginBottom: 8, display: "block",
 };
 
@@ -24,18 +24,18 @@ function PageToggle({ pageKey, label, checked, onClick }) {
     <div onClick={onClick} style={{
       display: "flex", alignItems: "center", gap: 8,
       padding: "8px 14px", borderRadius: 8, cursor: "pointer",
-      background: checked ? "#00c89614" : "#1a1b24",
-      border: `1px solid ${checked ? "#00c896" : "#2e3044"}`,
-      fontSize: 12, color: checked ? "#00c896" : "#555a7a",
-      fontFamily: "'Syne', sans-serif", fontWeight: 600,
+      background: checked ? "#f0fdf9" : "#f8fafc",
+      border: `1px solid ${checked ? "#00c896" : "#e2e8f0"}`,
+      fontSize: 12, color: checked ? "#059669" : "#64748b",
+      fontFamily: "'Inter', sans-serif", fontWeight: 600,
       transition: "all 0.15s", userSelect: "none",
     }}>
       <span style={{
         width: 14, height: 14, borderRadius: 3, flexShrink: 0,
-        border: `2px solid ${checked ? "#00c896" : "#3a3d52"}`,
+        border: `2px solid ${checked ? "#00c896" : "#cbd5e1"}`,
         background: checked ? "#00c896" : "transparent",
         display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 10, color: "#0d0e14",
+        fontSize: 10, color: "#ffffff",
       }}>
         {checked ? "✓" : ""}
       </span>
@@ -174,8 +174,8 @@ export default function AdminPanel({ S, showToast }) {
             <div style={{ ...S.sectionSub, marginBottom: 24 }}>New signups waiting for role assignment.</div>
             <div style={S.card}>
               {pendingUsers.length === 0 ? (
-                <div style={{ textAlign: "center", color: "#555a7a", padding: "50px 0", fontSize: 13 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: "#3a3d52", marginBottom: 8 }}>
+                <div style={{ textAlign: "center", color: "#94a3b8", padding: "50px 0", fontSize: 13 }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8", marginBottom: 8 }}>
                     No pending requests
                   </div>
                   All signups have been reviewed.
@@ -195,11 +195,11 @@ export default function AdminPanel({ S, showToast }) {
                     <tbody>
                       {pendingUsers.map(user => (
                         <tr key={user.id}
-                          onMouseEnter={e => e.currentTarget.style.background = "#1a1b24"}
+                          onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                           onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                           <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{user.email}</td>
                           <td style={S.td}>{user.displayName || "—"}</td>
-                          <td style={{ ...S.td, fontSize: 12, color: "#555a7a", whiteSpace: "nowrap" }}>{fmtDate(user.createdAt)}</td>
+                          <td style={{ ...S.td, fontSize: 12, color: "#94a3b8", whiteSpace: "nowrap" }}>{fmtDate(user.createdAt)}</td>
                           <td style={S.td}>
                             <select
                               style={{ ...S.select, width: 180, padding: "8px 12px", fontSize: 12 }}
@@ -234,7 +234,7 @@ export default function AdminPanel({ S, showToast }) {
             <div style={{ ...S.sectionSub, marginBottom: 24 }}>Manage roles for active users.</div>
             <div style={S.card}>
               {activeUsers.length === 0 ? (
-                <div style={{ textAlign: "center", color: "#555a7a", padding: "50px 0", fontSize: 13 }}>No active users yet.</div>
+                <div style={{ textAlign: "center", color: "#94a3b8", padding: "50px 0", fontSize: 13 }}>No active users yet.</div>
               ) : (
                 <div style={{ overflowX: "auto" }}>
                   <table style={S.table}>
@@ -254,17 +254,17 @@ export default function AdminPanel({ S, showToast }) {
                         const hasChange = selected !== (user.role ?? "");
                         return (
                           <tr key={user.id}
-                            onMouseEnter={e => e.currentTarget.style.background = "#1a1b24"}
+                            onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                             <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", fontSize: 12 }}>
                               {user.email}
-                              {isSelf && <span style={{ marginLeft: 8, fontSize: 10, color: "#00c896", fontFamily: "'Syne', sans-serif", fontWeight: 700 }}>YOU</span>}
+                              {isSelf && <span style={{ marginLeft: 8, fontSize: 10, color: "#059669", fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>YOU</span>}
                             </td>
                             <td style={S.td}>{user.displayName || "—"}</td>
                             <td style={S.td}>
                               {user.role
-                                ? <span style={S.badge("#7eb8ff")}>{roles.find(r => r.key === user.role)?.name || user.role}</span>
-                                : <span style={S.badge("#555a7a")}>No Role</span>}
+                                ? <span style={S.badge("#3b82f6")}>{roles.find(r => r.key === user.role)?.name || user.role}</span>
+                                : <span style={S.badge("#94a3b8")}>No Role</span>}
                             </td>
                             <td style={S.td}>
                               <select
@@ -307,9 +307,9 @@ export default function AdminPanel({ S, showToast }) {
               <div key={role.id} style={{ ...S.card, marginBottom: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: "#fff" }}>{role.name}</span>
-                    <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "#3a3d52" }}>{role.key}</span>
-                    {role.isSystem && <span style={S.badge("#3a3d52")}>System</span>}
+                    <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#0f172a" }}>{role.name}</span>
+                    <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "#94a3b8" }}>{role.key}</span>
+                    {role.isSystem && <span style={S.badge("#94a3b8")}>System</span>}
                   </div>
                   {!role.isSystem && (
                     <button onClick={() => handleDeleteRole(role)}
@@ -330,8 +330,8 @@ export default function AdminPanel({ S, showToast }) {
               </div>
             ))}
 
-            <div style={{ ...S.card, border: "1px dashed #2e3044" }}>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: "#fff", marginBottom: 18 }}>
+            <div style={{ ...S.card, border: "1px dashed #e2e8f0" }}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 14, color: "#0f172a", marginBottom: 18 }}>
                 Create New Role
               </div>
               <div style={{ marginBottom: 18 }}>

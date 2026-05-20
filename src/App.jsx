@@ -187,7 +187,7 @@ function Toast({ message, type, onDone }) {
       position: "fixed", bottom: 32, right: 32, zIndex: 9999,
       background: type === "error" ? "#ff4444" : "#00c896",
       color: "#fff", padding: "12px 22px", borderRadius: 8,
-      fontFamily: "'DM Mono', monospace", fontSize: 13,
+      fontFamily: "'Inter', sans-serif", fontSize: 13,
       boxShadow: "0 4px 24px rgba(0,0,0,0.18)", animation: "slideUp 0.25s ease",
     }}>{message}</div>
   );
@@ -234,14 +234,14 @@ function Pagination({ page, total, onPage, S }) {
   if (pages <= 1) return null;
   const from = (page - 1) * PAGE_SIZE + 1, to = Math.min(page * PAGE_SIZE, total);
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, paddingTop: 16, borderTop: "1px solid #1e2030" }}>
-      <span style={{ fontSize: 11, color: "#555a7a", fontFamily: "'Syne', sans-serif" }}>{from}–{to} of {total}</span>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, paddingTop: 16, borderTop: "1px solid #e2e8f0" }}>
+      <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Inter', sans-serif" }}>{from}–{to} of {total}</span>
       <div style={{ display: "flex", gap: 6 }}>
         {[["«", 1], ["‹", page - 1]].map(([lbl, pg]) => (
           <button key={lbl} disabled={page === 1} onClick={() => onPage(pg)}
             style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, opacity: page === 1 ? 0.35 : 1 }}>{lbl}</button>
         ))}
-        <span style={{ padding: "6px 14px", fontSize: 12, color: "#e0e0e8", background: "#1e2030", borderRadius: 8 }}>{page} / {pages}</span>
+        <span style={{ padding: "6px 14px", fontSize: 12, color: "#475569", background: "#f1f5f9", borderRadius: 8 }}>{page} / {pages}</span>
         {[["›", page + 1], ["»", pages]].map(([lbl, pg]) => (
           <button key={lbl} disabled={page === pages} onClick={() => onPage(pg)}
             style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, opacity: page === pages ? 0.35 : 1 }}>{lbl}</button>
@@ -365,7 +365,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
             <button key={key} style={S.navItem(bookTab === key)} onClick={() => setBookTab(key)}>{label}</button>
           ))}
         </nav>
-        <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, fontSize: 12, color: "#555a7a" }}>
+        <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, fontSize: 12, color: "#94a3b8" }}>
           {bookingRows.length} bookings · {examSessions.length} sessions
         </div>
       </div>
@@ -393,18 +393,18 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
               </div>
 
               {csvData && csvData.dupRows.length > 0 && (
-                <div style={{ marginTop: 24, padding: "16px 20px", background: "#1f1a0a", border: "1px solid #f5a623", borderRadius: 8 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, color: "#f5a623", marginBottom: 8 }}>
+                <div style={{ marginTop: 24, padding: "16px 20px", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 8 }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 13, color: "#d97706", marginBottom: 8 }}>
                     ⚠ {csvData.dupRows.length} duplicate Booking ID{csvData.dupRows.length > 1 ? "s" : ""} found
                   </div>
-                  <div style={{ fontSize: 12, color: "#9a8060", marginBottom: 14 }}>These Booking IDs already exist. How should they be handled?</div>
+                  <div style={{ fontSize: 12, color: "#92400e", marginBottom: 14 }}>These Booking IDs already exist. How should they be handled?</div>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <button onClick={() => setDupChoice("skip")}
-                      style={{ ...S.btn("secondary"), padding: "8px 16px", fontSize: 12, border: `1px solid ${dupChoice === "skip" ? "#00c896" : "#2e3044"}`, color: dupChoice === "skip" ? "#00c896" : "#aab" }}>
+                      style={{ ...S.btn("secondary"), padding: "8px 16px", fontSize: 12, border: `1px solid ${dupChoice === "skip" ? "#00c896" : "#e2e8f0"}`, color: dupChoice === "skip" ? "#00c896" : "#64748b" }}>
                       Skip duplicates — save {csvData.newRows.length} new rows
                     </button>
                     <button onClick={() => setDupChoice("overwrite")}
-                      style={{ ...S.btn("secondary"), padding: "8px 16px", fontSize: 12, border: `1px solid ${dupChoice === "overwrite" ? "#f5a623" : "#2e3044"}`, color: dupChoice === "overwrite" ? "#f5a623" : "#aab" }}>
+                      style={{ ...S.btn("secondary"), padding: "8px 16px", fontSize: 12, border: `1px solid ${dupChoice === "overwrite" ? "#d97706" : "#e2e8f0"}`, color: dupChoice === "overwrite" ? "#d97706" : "#64748b" }}>
                       Overwrite — save all {csvData.rows.length} rows
                     </button>
                     <button onClick={() => { setCsvData(null); setDupChoice(null); if (fileRef.current) fileRef.current.value = ""; }}
@@ -415,23 +415,23 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
 
               {csvData && dupChoice && (
                 <div style={{ marginTop: 24 }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, color: "#555a7a", marginBottom: 14, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#64748b", marginBottom: 14, letterSpacing: "0.1em", textTransform: "uppercase" }}>
                     Ready to save
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
                     {[
                       [rowsToSave.length, "Booking rows", "#00c896"],
-                      [csvData.newSessions.length, "New exam sessions", "#7eb8ff"],
-                      [csvData.reusedSessions.length, "Sessions reused (PINs kept)", "#555a7a"],
+                      [csvData.newSessions.length, "New exam sessions", "#3b82f6"],
+                      [csvData.reusedSessions.length, "Sessions reused (PINs kept)", "#64748b"],
                     ].map(([val, lbl, color]) => (
-                      <div key={lbl} style={{ background: "#0d0e14", border: "1px solid #1e2030", borderRadius: 8, padding: "14px 18px" }}>
-                        <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 22, color }}>{val}</div>
-                        <div style={{ fontSize: 11, color: "#555a7a", marginTop: 4 }}>{lbl}</div>
+                      <div key={lbl} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "14px 18px" }}>
+                        <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 22, color }}>{val}</div>
+                        <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{lbl}</div>
                       </div>
                     ))}
                   </div>
                   {csvData.warnSessions.length > 0 && (
-                    <div style={{ marginBottom: 16, padding: "12px 16px", background: "#0f1228", border: "1px solid #3a4070", borderRadius: 8, fontSize: 12, color: "#7eb8ff", lineHeight: 1.7 }}>
+                    <div style={{ marginBottom: 16, padding: "12px 16px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, fontSize: 12, color: "#2563eb", lineHeight: 1.7 }}>
                       ⚠ {csvData.warnSessions.length} session{csvData.warnSessions.length > 1 ? "s" : ""} have no matching Assessment Config — End Time uses 0 duration.
                       Fix by setting <strong>Assessment Duration</strong> in Assessment Configurations → Add / Edit.
                     </div>
@@ -449,11 +449,11 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
               )}
             </div>
 
-            <div style={{ ...S.card, background: "#0d0e14", border: "1px solid #2e3044", padding: "20px 24px" }}>
-              <div style={{ fontSize: 12, color: "#555a7a", lineHeight: 1.9 }}>
-                <strong style={{ color: "#7eb8ff" }}>Required CSV columns:</strong> Booking ID, Skill, Skill Level, Contest Date, Time Slot<br />
-                <strong style={{ color: "#7eb8ff" }}>End Time</strong> = Start Time + Assessment Duration (from config) + Buffer Time<br />
-                <strong style={{ color: "#7eb8ff" }}>EXIT PIN</strong> is preserved if the same slot was uploaded before.
+            <div style={{ ...S.card, background: "#f8fafc", border: "1px solid #e2e8f0", padding: "20px 24px" }}>
+              <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.9 }}>
+                <strong style={{ color: "#2563eb" }}>Required CSV columns:</strong> Booking ID, Skill, Skill Level, Contest Date, Time Slot<br />
+                <strong style={{ color: "#2563eb" }}>End Time</strong> = Start Time + Assessment Duration (from config) + Buffer Time<br />
+                <strong style={{ color: "#2563eb" }}>EXIT PIN</strong> is preserved if the same slot was uploaded before.
               </div>
             </div>
           </>
@@ -472,7 +472,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
             <div style={S.card}>
               {t1Filtered.length === 0 ? (
                 <div style={{ textAlign: "center", color: "#555a7a", padding: "60px 0", fontSize: 13 }}>
-                  <div style={{ marginBottom: 10, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: "#3a3d52" }}>
+                  <div style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8" }}>
                     {bookingRows.length === 0 ? "No bookings yet" : "No results for selected date"}
                   </div>
                   {bookingRows.length === 0 && "Upload a CSV to populate this table."}
@@ -485,7 +485,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                       <tbody>
                         {t1Filtered.slice((t1Page - 1) * PAGE_SIZE, t1Page * PAGE_SIZE).map(row => (
                           <tr key={row.id}
-                            onMouseEnter={e => e.currentTarget.style.background = "#1a1b24"}
+                            onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                             {T1_COLS.map(([, k]) => (
                               <td key={k} style={{ ...S.td, whiteSpace: "nowrap", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -494,7 +494,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                                   : k === "attendance"
                                   ? <span style={S.badge(row[k]?.toLowerCase() === "present" ? "#00c896" : row[k] ? "#f5a623" : "#555a7a")}>{row[k] || "—"}</span>
                                   : k === "contestLink" && row[k]
-                                  ? <a href={row[k]} target="_blank" rel="noreferrer" style={{ color: "#7eb8ff", textDecoration: "none", fontSize: 11 }}>Link ↗</a>
+                                  ? <a href={row[k]} target="_blank" rel="noreferrer" style={{ color: "#3b82f6", textDecoration: "none", fontSize: 11 }}>Link ↗</a>
                                   : (row[k] || "—")}
                               </td>
                             ))}
@@ -526,7 +526,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
             <div style={S.card}>
               {t2Filtered.length === 0 ? (
                 <div style={{ textAlign: "center", color: "#555a7a", padding: "60px 0", fontSize: 13 }}>
-                  <div style={{ marginBottom: 10, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: "#3a3d52" }}>
+                  <div style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8" }}>
                     {examSessions.length === 0 ? "No sessions yet" : "No results for selected date"}
                   </div>
                 </div>
@@ -538,7 +538,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                       <tbody>
                         {t2Filtered.slice((t2Page - 1) * PAGE_SIZE, t2Page * PAGE_SIZE).map(s => (
                           <tr key={s.id}
-                            onMouseEnter={e => e.currentTarget.style.background = "#1a1b24"}
+                            onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                             <td style={S.td}>
                               {s.assessmentTitle}
@@ -547,11 +547,11 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.dateOfAssessment}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.startTimeSlot}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.endTimeSlot}</td>
-                            <td style={{ ...S.td, fontSize: 11, color: "#7eb8ff", fontFamily: "'DM Mono', monospace" }}>{s.uniqueExamId}</td>
+                            <td style={{ ...S.td, fontSize: 11, color: "#3b82f6", fontFamily: "'DM Mono', monospace" }}>{s.uniqueExamId}</td>
                             <td style={S.td}>
                               <span style={{ ...S.badge("#ff9966"), fontFamily: "'DM Mono', monospace", letterSpacing: "0.2em", fontSize: 13 }}>{s.exitPin}</span>
                             </td>
-                            <td style={{ ...S.td, fontSize: 11, color: "#7eb8ff", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap" }}>
+                            <td style={{ ...S.td, fontSize: 11, color: "#3b82f6", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap" }}>
                               {s.topinAssessmentId ? s.topinAssessmentId.slice(0, 8) + "…" : "—"}
                             </td>
                             <td style={S.td}>
@@ -589,7 +589,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
             <div style={S.card}>
               {t3Filtered.length === 0 ? (
                 <div style={{ textAlign: "center", color: "#555a7a", padding: "60px 0", fontSize: 13 }}>
-                  <div style={{ marginBottom: 10, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: "#3a3d52" }}>
+                  <div style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8" }}>
                     {userMapping.length === 0 ? "No data yet" : "No results for selected date"}
                   </div>
                 </div>
@@ -601,7 +601,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                       <tbody>
                         {t3Filtered.slice((t3Page - 1) * PAGE_SIZE, t3Page * PAGE_SIZE).map((row, i) => (
                           <tr key={row.id || i}
-                            onMouseEnter={e => e.currentTarget.style.background = "#1a1b24"}
+                            onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                             <td style={S.td}>{row.studentName || "—"}</td>
                             <td style={S.td}>{row.niatId || "—"}</td>
@@ -610,7 +610,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                             <td style={S.td}>{row.skillLevel || "—"}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{row.contestDate || "—"}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{row.timeSlot || "—"}</td>
-                            <td style={{ ...S.td, fontSize: 11, fontFamily: "'DM Mono', monospace", color: row.mapped ? "#7eb8ff" : "#555a7a" }}>
+                            <td style={{ ...S.td, fontSize: 11, fontFamily: "'DM Mono', monospace", color: row.mapped ? "#3b82f6" : "#94a3b8" }}>
                               {row.uniqueExamId}
                               {!row.mapped && <span title="No matching exam session found" style={{ marginLeft: 6, color: "#f5a623" }}>⚠</span>}
                             </td>
@@ -782,42 +782,42 @@ function AppInner() {
   );
 
   const css = `
-    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #0d0e14; }
+    body { background: #f0f4f8; }
     @keyframes slideUp { from { transform: translateY(20px); opacity:0;} to { transform:translateY(0);opacity:1;} }
     @keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
-    ::-webkit-scrollbar { width: 5px; background: #1a1b24; }
-    ::-webkit-scrollbar-thumb { background: #2e3044; border-radius: 4px; }
+    ::-webkit-scrollbar { width: 5px; background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
   `;
 
   const S = {
-    root: { minHeight: "100vh", background: "#0d0e14", fontFamily: "'DM Mono', monospace", color: "#e0e0e8", display: "flex" },
-    sidebar: { width: 240, background: "#0a0b10", borderRight: "1px solid #1e2030", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 200 },
-    sidebarBrand: { padding: "24px 20px", borderBottom: "1px solid #1e2030", fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, color: "#fff", letterSpacing: "-0.3px", display: "flex", alignItems: "center", gap: 10 },
+    root: { minHeight: "100vh", background: "#f0f4f8", fontFamily: "'Inter', sans-serif", color: "#0f172a", display: "flex" },
+    sidebar: { width: 240, background: "#ffffff", borderRight: "1px solid #e2e8f0", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 200, boxShadow: "2px 0 8px rgba(15,23,42,0.05)" },
+    sidebarBrand: { padding: "24px 20px", borderBottom: "1px solid #e2e8f0", fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 15, color: "#0f172a", letterSpacing: "-0.3px", display: "flex", alignItems: "center", gap: 10 },
     dot: { width: 8, height: 8, borderRadius: "50%", background: "#00c896", display: "inline-block", flexShrink: 0 },
     sidebarNav: { padding: "12px 10px", flex: 1 },
-    sidebarItem: (active) => ({ display: "flex", alignItems: "center", gap: 11, width: "100%", padding: "10px 12px", borderRadius: 8, fontFamily: "'Syne', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: "pointer", color: active ? "#fff" : "#555a7a", background: active ? "#1a1b24" : "transparent", border: "none", borderLeft: active ? "2px solid #00c896" : "2px solid transparent", textAlign: "left", transition: "all 0.15s", marginBottom: 2 }),
+    sidebarItem: (active) => ({ display: "flex", alignItems: "center", gap: 11, width: "100%", padding: "10px 12px", borderRadius: 8, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: "pointer", color: active ? "#059669" : "#64748b", background: active ? "#f0fdf9" : "transparent", border: "none", borderLeft: active ? "2px solid #00c896" : "2px solid transparent", textAlign: "left", transition: "all 0.15s", marginBottom: 2 }),
     main: { marginLeft: 240, flex: 1, minWidth: 0, display: "flex", flexDirection: "column" },
-    header: { borderBottom: "1px solid #1e2030", padding: "0 48px", display: "flex", alignItems: "flex-end", gap: 32, background: "#0d0e14", position: "sticky", top: 0, zIndex: 100 },
-    headerTitle: { fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, color: "#3a3d52", paddingBottom: 20, paddingTop: 20, marginRight: 8 },
+    header: { borderBottom: "1px solid #e2e8f0", padding: "0 48px", display: "flex", alignItems: "flex-end", gap: 32, background: "#ffffff", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 4px rgba(15,23,42,0.04)" },
+    headerTitle: { fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 13, color: "#94a3b8", paddingBottom: 20, paddingTop: 20, marginRight: 8 },
     nav: { display: "flex", gap: 0 },
-    navItem: (active) => ({ padding: "18px 18px", fontFamily: "'Syne', sans-serif", fontWeight: 600, fontSize: 13, cursor: "pointer", color: active ? "#fff" : "#555a7a", background: "none", border: "none", borderBottom: active ? "2px solid #00c896" : "2px solid transparent", transition: "color 0.15s" }),
+    navItem: (active) => ({ padding: "18px 18px", fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13, cursor: "pointer", color: active ? "#0f172a" : "#94a3b8", background: "none", border: "none", borderBottom: active ? "2px solid #00c896" : "2px solid transparent", transition: "color 0.15s" }),
     body: { padding: "36px 48px", maxWidth: 1300 },
-    card: { background: "#13141e", border: "1px solid #1e2030", borderRadius: 12, padding: "28px 32px", marginBottom: 24 },
-    label: { fontSize: 11, fontFamily: "'Syne', sans-serif", fontWeight: 700, letterSpacing: "0.12em", color: "#555a7a", textTransform: "uppercase", marginBottom: 8, display: "block" },
-    select: { width: "100%", background: "#0d0e14", border: "1px solid #2e3044", borderRadius: 8, color: "#e0e0e8", padding: "11px 14px", fontFamily: "'DM Mono', monospace", fontSize: 13, outline: "none", appearance: "none", cursor: "pointer" },
-    input: { width: "100%", background: "#0d0e14", border: "1px solid #2e3044", borderRadius: 8, color: "#e0e0e8", padding: "11px 14px", fontFamily: "'DM Mono', monospace", fontSize: 13, outline: "none" },
-    btn: (variant = "primary") => ({ padding: "11px 24px", borderRadius: 8, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer", background: variant === "primary" ? "#00c896" : variant === "danger" ? "transparent" : "#1e2030", color: variant === "primary" ? "#0d0e14" : variant === "danger" ? "#ff5555" : "#aab", border: variant === "danger" ? "1px solid #ff5555" : "none", transition: "opacity 0.15s" }),
+    card: { background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "28px 32px", marginBottom: 24, boxShadow: "0 1px 4px rgba(15,23,42,0.04)" },
+    label: { fontSize: 11, fontFamily: "'Inter', sans-serif", fontWeight: 600, letterSpacing: "0.06em", color: "#64748b", textTransform: "uppercase", marginBottom: 8, display: "block" },
+    select: { width: "100%", background: "#ffffff", border: "1px solid #dde3ed", borderRadius: 8, color: "#0f172a", padding: "11px 14px", fontFamily: "'Inter', sans-serif", fontSize: 13, outline: "none", appearance: "none", cursor: "pointer" },
+    input: { width: "100%", background: "#ffffff", border: "1px solid #dde3ed", borderRadius: 8, color: "#0f172a", padding: "11px 14px", fontFamily: "'Inter', sans-serif", fontSize: 13, outline: "none" },
+    btn: (variant = "primary") => ({ padding: "11px 24px", borderRadius: 8, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13, cursor: "pointer", background: variant === "primary" ? "#00c896" : variant === "danger" ? "transparent" : "#f1f5f9", color: variant === "primary" ? "#fff" : variant === "danger" ? "#ef4444" : "#475569", border: variant === "danger" ? "1px solid #fecaca" : "none", transition: "opacity 0.15s" }),
     grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 },
-    sectionTitle: { fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 22, color: "#fff", marginBottom: 6 },
-    sectionSub: { fontSize: 12, color: "#555a7a", marginBottom: 28 },
+    sectionTitle: { fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 22, color: "#0f172a", marginBottom: 6, letterSpacing: "-0.4px" },
+    sectionSub: { fontSize: 13, color: "#94a3b8", marginBottom: 28 },
     table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-    th: { fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: "0.1em", color: "#555a7a", textTransform: "uppercase", padding: "10px 14px", textAlign: "left", borderBottom: "1px solid #1e2030" },
-    td: { padding: "12px 14px", borderBottom: "1px solid #1a1b24", verticalAlign: "middle" },
-    badge: (color = "#00c896") => ({ display: "inline-block", background: color + "18", color, borderRadius: 4, padding: "2px 10px", fontSize: 11, fontFamily: "'Syne', sans-serif", fontWeight: 700, letterSpacing: "0.08em" }),
-    pill: { display: "inline-flex", alignItems: "center", gap: 8, background: "#1a1b24", border: "1px solid #2e3044", borderRadius: 20, padding: "5px 12px 5px 16px", fontSize: 12, color: "#c0c4d8", margin: "4px" },
-    pillX: { cursor: "pointer", fontSize: 15, lineHeight: 1, background: "none", border: "none", padding: 0, color: "#ff5555" },
+    th: { fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 11, letterSpacing: "0.06em", color: "#94a3b8", textTransform: "uppercase", padding: "10px 14px", textAlign: "left", borderBottom: "1px solid #f1f5f9" },
+    td: { padding: "12px 14px", borderBottom: "1px solid #f8fafc", verticalAlign: "middle" },
+    badge: (color = "#00c896") => ({ display: "inline-block", background: color + "18", color, borderRadius: 4, padding: "2px 10px", fontSize: 11, fontFamily: "'Inter', sans-serif", fontWeight: 700, letterSpacing: "0.06em" }),
+    pill: { display: "inline-flex", alignItems: "center", gap: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 20, padding: "5px 12px 5px 16px", fontSize: 12, color: "#475569", margin: "4px" },
+    pillX: { cursor: "pointer", fontSize: 15, lineHeight: 1, background: "none", border: "none", padding: 0, color: "#ef4444" },
   };
 
   const NAV_ITEMS = [
@@ -829,9 +829,9 @@ function AppInner() {
   ];
 
   if (authLoading) return (
-    <div style={{ minHeight: "100vh", background: "#0d0e14", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ minHeight: "100vh", background: "#f0f4f8", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <style>{css}</style>
-      <span style={{ color: "#555a7a", fontFamily: "'Syne', sans-serif", fontSize: 14 }}>Loading…</span>
+      <span style={{ color: "#94a3b8", fontFamily: "'Inter', sans-serif", fontSize: 14 }}>Loading…</span>
     </div>
   );
   if (!currentUser) return <LoginPage />;
@@ -839,7 +839,7 @@ function AppInner() {
 
   if (firestoreLoading) return (
     <div style={{ ...S.root, alignItems: "center", justifyContent: "center" }}>
-      <span style={{ color: "#555a7a", fontFamily: "'Syne', sans-serif", fontSize: 14 }}>Connecting to database…</span>
+      <span style={{ color: "#94a3b8", fontFamily: "'Inter', sans-serif", fontSize: 14 }}>Connecting to database…</span>
     </div>
   );
 
@@ -855,27 +855,27 @@ function AppInner() {
             const locked = key !== "admin" && !allowedPages.includes(key);
             return (
               <button key={key}
-                style={{ ...S.sidebarItem(active), color: locked ? "#3a3d52" : active ? "#fff" : "#555a7a", cursor: locked ? "not-allowed" : "pointer" }}
+                style={{ ...S.sidebarItem(active), color: locked ? "#cbd5e1" : active ? "#059669" : "#64748b", cursor: locked ? "not-allowed" : "pointer" }}
                 title={locked ? "Contact admin for access" : undefined}
                 onClick={() => { if (locked) { showToast("Contact admin for access.", "error"); return; } setPage(key); }}>
-                <Icon color={locked ? "#3a3d52" : active ? "#fff" : "#555a7a"} />
+                <Icon color={locked ? "#cbd5e1" : active ? "#059669" : "#64748b"} />
                 {label}
-                {locked && <span style={{ marginLeft: "auto", fontSize: 10, color: "#3a3d52" }}>🔒</span>}
+                {locked && <span style={{ marginLeft: "auto", fontSize: 10, color: "#cbd5e1" }}>🔒</span>}
               </button>
             );
           })}
         </nav>
-        <div style={{ padding: "14px 12px", borderTop: "1px solid #1e2030" }}>
-          <div style={{ fontSize: 11, color: "#7eb8ff", fontFamily: "'DM Mono', monospace", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 4 }}>
+        <div style={{ padding: "14px 12px", borderTop: "1px solid #e2e8f0" }}>
+          <div style={{ fontSize: 11, color: "#0ea5e9", fontFamily: "'DM Mono', monospace", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 4 }}>
             {userProfile.displayName || userProfile.email}
           </div>
-          <div style={{ fontSize: 10, color: "#3a3d52", fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.1em", paddingLeft: 4 }}>
+          <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Inter', sans-serif", fontWeight: 700, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.1em", paddingLeft: 4 }}>
             {userProfile.role ? userProfile.role.replace(/-/g, " ") : "No Role"}
           </div>
           <button onClick={() => signOut(auth)} style={{
-            width: "100%", background: "transparent", border: "1px solid #2e3044",
-            borderRadius: 6, color: "#555a7a", padding: "8px 12px",
-            fontFamily: "'Syne', sans-serif", fontWeight: 600, fontSize: 11,
+            width: "100%", background: "transparent", border: "1px solid #e2e8f0",
+            borderRadius: 6, color: "#64748b", padding: "8px 12px",
+            fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 11,
             cursor: "pointer", textAlign: "left",
           }}>
             Sign Out
@@ -894,7 +894,7 @@ function AppInner() {
                   <button key={key} style={S.navItem(tab === key)} onClick={() => setTab(key)}>{label}</button>
                 ))}
               </nav>
-              <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, fontSize: 12, color: "#555a7a" }}>
+              <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, fontSize: 12, color: "#94a3b8" }}>
                 {assessments.length} assessment{assessments.length !== 1 ? "s" : ""}
               </div>
             </div>
@@ -930,7 +930,7 @@ function AppInner() {
                       {selSkill && (
                         <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                           {levels.map(l => { const t = takenSet.has(`${selSkill}::${l}`); return (
-                            <span key={l} style={{ fontSize: 11, fontFamily: "'Syne', sans-serif", fontWeight: 700, padding: "3px 10px", borderRadius: 4, background: t ? "#ff555518" : "#00c89618", color: t ? "#ff5555" : "#00c896" }}>
+                            <span key={l} style={{ fontSize: 11, fontFamily: "'Inter', sans-serif", fontWeight: 700, padding: "3px 10px", borderRadius: 4, background: t ? "#fee2e2" : "#dcfce7", color: t ? "#dc2626" : "#059669" }}>
                               {l} {t ? "✕ filled" : "✓ open"}
                             </span>
                           ); })}
@@ -945,7 +945,7 @@ function AppInner() {
                         <label style={S.label}>Assessment Duration (minutes)</label>
                         <input style={{ ...S.input, maxWidth: 220 }} type="number" min="0" placeholder="e.g. 60"
                           value={selDuration} onChange={e => setSelDuration(e.target.value)} />
-                        <div style={{ marginTop: 6, fontSize: 11, color: "#555a7a" }}>Used to compute End Time in Student Bookings. Leave blank to treat as 0.</div>
+                        <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>Used to compute End Time in Student Bookings. Leave blank to treat as 0.</div>
                       </div>
                       <div style={{ marginTop: 24, display: "flex", gap: 12 }}>
                         <button style={S.btn("primary")} onClick={handleSave}>{editId ? "Update Assessment" : "Save Assessment"}</button>
@@ -954,7 +954,7 @@ function AppInner() {
                     </div>
                     {assessments.length > 0 && (
                       <div style={S.card}>
-                        <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, color: "#555a7a", marginBottom: 16, letterSpacing: "0.08em", textTransform: "uppercase" }}>Recent Entries</div>
+                        <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 13, color: "#94a3b8", marginBottom: 16, letterSpacing: "0.08em", textTransform: "uppercase" }}>Recent Entries</div>
                         <table style={S.table}>
                           <thead><tr><th style={S.th}>Skill</th><th style={S.th}>Level</th><th style={S.th}>Duration</th><th style={S.th}>URL</th><th style={S.th}></th></tr></thead>
                           <tbody>
@@ -962,7 +962,7 @@ function AppInner() {
                               <tr key={a.id}>
                                 <td style={S.td}>{a.skill}</td>
                                 <td style={S.td}><span style={S.badge()}>{a.level}</span></td>
-                                <td style={{ ...S.td, color: "#555a7a" }}>{a.duration ? `${a.duration} min` : "—"}</td>
+                                <td style={{ ...S.td, color: "#94a3b8" }}>{a.duration ? `${a.duration} min` : "—"}</td>
                                 <td style={{ ...S.td, maxWidth: 280 }}>
                                   <a href={a.url} target="_blank" rel="noreferrer" style={{ color: "#00c896", textDecoration: "none", fontSize: 12 }}>{a.url.slice(0, 48)}…</a>
                                 </td>
@@ -1005,14 +1005,14 @@ function AppInner() {
                         <thead><tr><th style={S.th}>Skill</th><th style={S.th}>Level</th><th style={S.th}>Duration</th><th style={S.th}>Config URL</th><th style={S.th}>Added</th><th style={S.th}></th></tr></thead>
                         <tbody>
                           {filtered.map(a => (
-                            <tr key={a.id} onMouseEnter={e => e.currentTarget.style.background = "#1a1b24"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                            <tr key={a.id} onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                               <td style={S.td}>{a.skill}</td>
                               <td style={S.td}><span style={S.badge()}>{a.level}</span></td>
-                              <td style={{ ...S.td, color: "#555a7a" }}>{a.duration ? `${a.duration} min` : "—"}</td>
+                              <td style={{ ...S.td, color: "#94a3b8" }}>{a.duration ? `${a.duration} min` : "—"}</td>
                               <td style={{ ...S.td, maxWidth: 300 }}>
-                                <a href={a.url} target="_blank" rel="noreferrer" style={{ color: "#7eb8ff", textDecoration: "none", fontSize: 12, wordBreak: "break-all" }}>{a.url.length > 50 ? a.url.slice(0, 50) + "…" : a.url}</a>
+                                <a href={a.url} target="_blank" rel="noreferrer" style={{ color: "#3b82f6", textDecoration: "none", fontSize: 12, wordBreak: "break-all" }}>{a.url.length > 50 ? a.url.slice(0, 50) + "…" : a.url}</a>
                               </td>
-                              <td style={{ ...S.td, fontSize: 11, color: "#555a7a", whiteSpace: "nowrap" }}>{formatDate(a.createdAt)}</td>
+                              <td style={{ ...S.td, fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap" }}>{formatDate(a.createdAt)}</td>
                               <td style={{ ...S.td, whiteSpace: "nowrap" }}>
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <button style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12 }} onClick={() => handleEdit(a)}>Edit</button>
@@ -1034,7 +1034,7 @@ function AppInner() {
                   <div style={S.sectionSub}>Add or remove skills and difficulty levels.</div>
                   <div style={S.grid2}>
                     <div style={S.card}>
-                      <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: "#fff", marginBottom: 20 }}>Skills</div>
+                      <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#0f172a", marginBottom: 20 }}>Skills</div>
                       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
                         <input style={{ ...S.input, flex: 1 }} placeholder="New skill name…" value={newSkill} onChange={e => setNewSkill(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAddSkill()} />
                         <button style={{ ...S.btn("primary"), whiteSpace: "nowrap" }} onClick={handleAddSkill}>Add</button>
@@ -1044,7 +1044,7 @@ function AppInner() {
                       </div>
                     </div>
                     <div style={S.card}>
-                      <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: "#fff", marginBottom: 20 }}>Levels</div>
+                      <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#0f172a", marginBottom: 20 }}>Levels</div>
                       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
                         <input style={{ ...S.input, flex: 1 }} placeholder="e.g. L3, Advanced…" value={newLevel} onChange={e => setNewLevel(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAddLevel()} />
                         <button style={{ ...S.btn("primary"), whiteSpace: "nowrap" }} onClick={handleAddLevel}>Add</button>
@@ -1054,9 +1054,9 @@ function AppInner() {
                       </div>
                     </div>
                   </div>
-                  <div style={{ ...S.card, background: "#0d0e14", border: "1px solid #2e3044", padding: "20px 24px" }}>
-                    <div style={{ fontSize: 12, color: "#555a7a", lineHeight: 1.8 }}>
-                      <strong style={{ color: "#7eb8ff" }}>Note:</strong> Removing a skill or level does not delete assessments already stored under them.
+                  <div style={{ ...S.card, background: "#f8fafc", border: "1px solid #e2e8f0", padding: "20px 24px" }}>
+                    <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.8 }}>
+                      <strong style={{ color: "#2563eb" }}>Note:</strong> Removing a skill or level does not delete assessments already stored under them.
                     </div>
                   </div>
                 </div>

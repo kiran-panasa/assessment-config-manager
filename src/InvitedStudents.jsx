@@ -55,7 +55,7 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
     <div style={{ animation: "fadeIn 0.2s ease" }}>
       <div style={S.header}>
         <span style={S.headerTitle}>Invited Students</span>
-        <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, fontSize: 12, color: "#555a7a" }}>
+        <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, fontSize: 12, color: "#94a3b8" }}>
           {rows.length} students
         </div>
       </div>
@@ -77,8 +77,8 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
 
         <div style={S.card}>
           {filtered.length === 0 ? (
-            <div style={{ textAlign: "center", color: "#555a7a", padding: "60px 0", fontSize: 13 }}>
-              <div style={{ marginBottom: 10, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: "#3a3d52" }}>
+            <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0", fontSize: 13 }}>
+              <div style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8" }}>
                 {rows.length === 0 ? "No data yet" : "No results for selected date"}
               </div>
               {rows.length === 0 && "Upload a CSV and publish assessments to populate this table."}
@@ -93,7 +93,7 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
                   <tbody>
                     {paged.map((row, i) => (
                       <tr key={row.id || i}
-                        onMouseEnter={e => e.currentTarget.style.background = "#1a1b24"}
+                        onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                         onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                         <td style={S.td}>{row.studentName || "—"}</td>
                         <td style={S.td}>{row.niatId || "—"}</td>
@@ -102,7 +102,7 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
                         <td style={S.td}>{row.skillLevel || "—"}</td>
                         <td style={{ ...S.td, whiteSpace: "nowrap" }}>{row.contestDate || "—"}</td>
                         <td style={{ ...S.td, whiteSpace: "nowrap" }}>{row.timeSlot || "—"}</td>
-                        <td style={{ ...S.td, fontSize: 11, fontFamily: "'DM Mono', monospace", color: row.mapped ? "#7eb8ff" : "#555a7a" }}>
+                        <td style={{ ...S.td, fontSize: 11, fontFamily: "'DM Mono', monospace", color: row.mapped ? "#3b82f6" : "#94a3b8" }}>
                           {row.uniqueExamId}
                           {!row.mapped && <span title="No matching exam session" style={{ marginLeft: 6, color: "#f5a623" }}>⚠</span>}
                         </td>
@@ -111,7 +111,7 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
                             ? <span style={S.badge("#00c896")}>Sent</span>
                             : row.inviteStatus === "failed"
                             ? <span style={S.badge("#ff5555")}>Failed</span>
-                            : <span style={S.badge("#555a7a")}>Not Sent</span>}
+                            : <span style={S.badge("#94a3b8")}>Not Sent</span>}
                         </td>
                         <td style={{ ...S.td, maxWidth: 280 }}>
                           {row.userAssessmentLink ? (
@@ -126,7 +126,7 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
                               </button>
                             </div>
                           ) : (
-                            <span style={{ color: "#3a3d52", fontSize: 12 }}>—</span>
+                            <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
                           )}
                         </td>
                       </tr>
@@ -136,8 +136,8 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
               </div>
 
               {pages > 1 && (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, paddingTop: 16, borderTop: "1px solid #1e2030" }}>
-                  <span style={{ fontSize: 11, color: "#555a7a", fontFamily: "'Syne', sans-serif" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, paddingTop: 16, borderTop: "1px solid #e2e8f0" }}>
+                  <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Inter', sans-serif" }}>
                     {(pg - 1) * PAGE_SIZE + 1}–{Math.min(pg * PAGE_SIZE, filtered.length)} of {filtered.length}
                   </span>
                   <div style={{ display: "flex", gap: 6 }}>
@@ -145,7 +145,7 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
                       <button key={lbl} disabled={pg === 1} onClick={() => setPg(p)}
                         style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, opacity: pg === 1 ? 0.35 : 1 }}>{lbl}</button>
                     ))}
-                    <span style={{ padding: "6px 14px", fontSize: 12, color: "#e0e0e8", background: "#1e2030", borderRadius: 8 }}>{pg} / {pages}</span>
+                    <span style={{ padding: "6px 14px", fontSize: 12, color: "#475569", background: "#f1f5f9", borderRadius: 8 }}>{pg} / {pages}</span>
                     {[["›", pg + 1], ["»", pages]].map(([lbl, p]) => (
                       <button key={lbl} disabled={pg === pages} onClick={() => setPg(p)}
                         style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, opacity: pg === pages ? 0.35 : 1 }}>{lbl}</button>

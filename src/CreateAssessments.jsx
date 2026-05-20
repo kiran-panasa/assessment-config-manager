@@ -194,7 +194,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
         </nav>
         <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ width: 8, height: 8, borderRadius: "50%", display: "inline-block", flexShrink: 0, background: serverOnline === null ? "#555a7a" : serverOnline ? "#00c896" : "#ff5555" }} />
-          <span style={{ fontSize: 12, fontFamily: "'Syne', sans-serif", color: serverOnline ? "#00c896" : serverOnline === null ? "#555a7a" : "#ff5555" }}>
+          <span style={{ fontSize: 12, fontFamily: "'Inter', sans-serif", color: serverOnline ? "#059669" : serverOnline === null ? "#94a3b8" : "#ef4444" }}>
             {serverOnline === null ? "Checking…" : serverOnline ? "Server online" : "Server offline"}
           </span>
         </div>
@@ -204,10 +204,10 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
 
         {/* ── Offline warning ── */}
         {serverOnline === false && (
-          <div style={{ marginBottom: 24, padding: "16px 20px", background: "#1a0a0a", border: "1px solid #ff5555", borderRadius: 8, fontSize: 12, color: "#ff9999", lineHeight: 1.9 }}>
-            <strong style={{ color: "#ff5555" }}>Server is not reachable.</strong>{" "}
+          <div style={{ marginBottom: 24, padding: "16px 20px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 12, color: "#dc2626", lineHeight: 1.9 }}>
+            <strong style={{ color: "#dc2626" }}>Server is not reachable.</strong>{" "}
             {creds.serverUrl?.includes("localhost")
-              ? <>Start it locally: <code style={{ background: "#0d0e14", padding: "2px 8px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e0e0e8" }}>cd scripts &amp;&amp; node server.js</code></>
+              ? <>Start it locally: <code style={{ background: "#1e293b", padding: "2px 8px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>cd scripts &amp;&amp; node server.js</code></>
               : "Check that your Railway service is running and the URL in Credentials is correct."}
           </div>
         )}
@@ -220,21 +220,21 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
 
             {/* Server URL */}
             <div style={S.card}>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, color: "#7eb8ff", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.12em" }}>Automation Server</div>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>Automation Server</div>
               <label style={S.label}>Server URL</label>
               <input style={S.input} type="url"
                 placeholder="http://localhost:3001  or  https://your-app.railway.app"
                 value={creds.serverUrl}
                 onChange={e => setCreds(p => ({ ...p, serverUrl: e.target.value.trim() }))} />
-              <div style={{ marginTop: 6, fontSize: 11, color: "#555a7a" }}>
-                Local: <code style={{ color: "#7eb8ff" }}>http://localhost:3001</code> &nbsp;·&nbsp;
+              <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
+                Local: <code style={{ color: "#3b82f6" }}>http://localhost:3001</code> &nbsp;·&nbsp;
                 Railway: paste your Railway service URL here — shared across all devices automatically.
               </div>
             </div>
 
             {/* Topin login */}
             <div style={S.card}>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, color: "#7eb8ff", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.12em" }}>Topin Login</div>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>Topin Login</div>
               <div style={S.grid2}>
                 <div>
                   <label style={S.label}>Mobile Number</label>
@@ -251,7 +251,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
 
             {/* Invite API */}
             <div style={S.card}>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, color: "#7eb8ff", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.12em" }}>Invite API</div>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>Invite API</div>
               <div style={S.grid2}>
                 <div>
                   <label style={S.label}>API Endpoint</label>
@@ -264,8 +264,8 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
                     value={creds.apiToken} onChange={e => setCreds(p => ({ ...p, apiToken: e.target.value }))} />
                 </div>
               </div>
-              <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #1e2030" }}>
-                <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 11, color: "#555a7a", marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.12em" }}>Payload Field Names</div>
+              <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #e2e8f0" }}>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, color: "#64748b", marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.06em" }}>Payload Field Names</div>
                 <div style={S.grid2}>
                   <div>
                     <label style={S.label}>Student UID field</label>
@@ -300,7 +300,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
                 {availableDates.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
               {availableDates.length === 0 && (
-                <div style={{ marginTop: 12, fontSize: 12, color: "#555a7a" }}>No exam sessions found. Upload a CSV in Student Bookings first.</div>
+                <div style={{ marginTop: 12, fontSize: 12, color: "#94a3b8" }}>No exam sessions found. Upload a CSV in Student Bookings first.</div>
               )}
             </div>
 
@@ -312,9 +312,9 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
                 [stats.toInvite,  "Invites Pending", "#f5a623"],
                 [stats.invited,   "Invites Sent",    "#00c896"],
               ].map(([val, lbl, color]) => (
-                <div key={lbl} style={{ background: "#13141e", border: "1px solid #1e2030", borderRadius: 12, padding: "18px 22px" }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 30, color }}>{val}</div>
-                  <div style={{ fontSize: 11, color: "#555a7a", marginTop: 4, fontFamily: "'Syne', sans-serif" }}>{lbl}</div>
+                <div key={lbl} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "18px 22px" }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 30, color }}>{val}</div>
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, fontFamily: "'Inter', sans-serif" }}>{lbl}</div>
                 </div>
               ))}
             </div>
@@ -326,14 +326,14 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
                   onClick={handlePublish} disabled={!!running || !serverOnline}>
                   {running === "publish" ? "Publishing…" : "Publish Sessions"}
                 </button>
-                <div style={{ marginTop: 8, fontSize: 11, color: "#555a7a" }}>Opens browser · clones &amp; publishes on Topin</div>
+                <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8" }}>Opens browser · clones &amp; publishes on Topin</div>
               </div>
               <div>
-                <button style={{ ...S.btn("secondary"), minWidth: 190, opacity: (running || !serverOnline) ? 0.45 : 1, border: "1px solid #2e3044" }}
+                <button style={{ ...S.btn("secondary"), minWidth: 190, opacity: (running || !serverOnline) ? 0.45 : 1, border: "1px solid #e2e8f0" }}
                   onClick={handleInvite} disabled={!!running || !serverOnline}>
                   {running === "invite" ? "Inviting…" : "Invite Students"}
                 </button>
-                <div style={{ marginTop: 8, fontSize: 11, color: "#555a7a" }}>Sends API invite to all pending students</div>
+                <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8" }}>Sends API invite to all pending students</div>
               </div>
               {running && (
                 <button style={{ ...S.btn("danger"), minWidth: 110, marginLeft: "auto", alignSelf: "flex-start" }} onClick={cancelJob}>Cancel</button>
@@ -343,8 +343,8 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
             {/* Progress log */}
             {logs.length > 0 && (
               <div style={{ ...S.card, padding: 0, overflow: "hidden" }}>
-                <div style={{ padding: "14px 20px", borderBottom: "1px solid #1e2030", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 11, color: "#555a7a", textTransform: "uppercase", letterSpacing: "0.12em" }}>Progress Log</span>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Progress Log</span>
                   <button style={{ ...S.btn("secondary"), padding: "4px 12px", fontSize: 11 }} onClick={() => setLogs([])}>Clear</button>
                 </div>
                 <div style={{ background: "#0a0b10", padding: "16px 20px", maxHeight: 420, overflowY: "auto", fontFamily: "'DM Mono', monospace", fontSize: 12.5, lineHeight: 1.9 }}>
@@ -371,9 +371,9 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
                 [`$${creditStats.estimatedCost.toFixed(4)}`, "Est. active cost", "#f5a623"],
                 [`$${(FREE_TRIAL - creditStats.estimatedCost).toFixed(3)}`, "Trial credit remaining", "#00c896"],
               ].map(([val, lbl, color]) => (
-                <div key={lbl} style={{ background: "#13141e", border: "1px solid #1e2030", borderRadius: 12, padding: "18px 22px" }}>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 24, color }}>{val}</div>
-                  <div style={{ fontSize: 11, color: "#555a7a", marginTop: 4, fontFamily: "'Syne', sans-serif" }}>{lbl}</div>
+                <div key={lbl} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "18px 22px" }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 24, color }}>{val}</div>
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, fontFamily: "'Inter', sans-serif" }}>{lbl}</div>
                 </div>
               ))}
             </div>
@@ -381,27 +381,27 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
             {/* Progress bar */}
             <div style={{ ...S.card, padding: "20px 24px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                <span style={{ fontSize: 12, fontFamily: "'Syne', sans-serif", fontWeight: 700, color: "#e0e0e8" }}>Free Trial Usage</span>
-                <span style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", color: "#555a7a" }}>
+                <span style={{ fontSize: 12, fontFamily: "'Inter', sans-serif", fontWeight: 700, color: "#0f172a" }}>Free Trial Usage</span>
+                <span style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", color: "#64748b" }}>
                   ${creditStats.estimatedCost.toFixed(4)} of ${FREE_TRIAL.toFixed(2)}
                 </span>
               </div>
-              <div style={{ background: "#1e2030", borderRadius: 6, height: 10, overflow: "hidden" }}>
+              <div style={{ background: "#e2e8f0", borderRadius: 6, height: 10, overflow: "hidden" }}>
                 <div style={{ width: `${creditStats.percentUsed}%`, height: "100%", background: creditStats.percentUsed > 80 ? "#ff5555" : creditStats.percentUsed > 50 ? "#f5a623" : "#00c896", borderRadius: 6, transition: "width 0.5s ease" }} />
               </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: "#555a7a" }}>
+              <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8" }}>
                 Active compute only. For total spend including idle time, check your{" "}
-                <a href="https://railway.app" target="_blank" rel="noreferrer" style={{ color: "#7eb8ff" }}>Railway dashboard</a>.
+                <a href="https://railway.app" target="_blank" rel="noreferrer" style={{ color: "#3b82f6" }}>Railway dashboard</a>.
               </div>
             </div>
 
             {/* Job history */}
             <div style={S.card}>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 12, color: "#555a7a", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.12em" }}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#64748b", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 Job History — {currentMonth}
               </div>
               {jobLogs.length === 0 ? (
-                <div style={{ textAlign: "center", color: "#555a7a", padding: "32px 0", fontSize: 13 }}>No jobs run this month yet.</div>
+                <div style={{ textAlign: "center", color: "#94a3b8", padding: "32px 0", fontSize: 13 }}>No jobs run this month yet.</div>
               ) : (
                 <table style={S.table}>
                   <thead>
@@ -417,10 +417,10 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
                         : `${log.sent ?? 0} sent, ${log.failed ?? 0} failed`;
                       return (
                         <tr key={log.id}
-                          onMouseEnter={e => e.currentTarget.style.background = "#1a1b24"}
+                          onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                           onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                           <td style={S.td}>
-                            <span style={S.badge(log.type === "publish" ? "#7eb8ff" : "#00c896")}>
+                            <span style={S.badge(log.type === "publish" ? "#3b82f6" : "#00c896")}>
                               {log.type}
                             </span>
                           </td>
@@ -430,7 +430,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
                           <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", fontSize: 12 }}>
                             {log.durationMinutes?.toFixed(1) || "—"} min
                           </td>
-                          <td style={{ ...S.td, fontSize: 12, color: "#555a7a" }}>{result}</td>
+                          <td style={{ ...S.td, fontSize: 12, color: "#94a3b8" }}>{result}</td>
                           <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#f5a623" }}>
                             ${cost.toFixed(5)}
                           </td>
@@ -442,9 +442,9 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
               )}
             </div>
 
-            <div style={{ padding: "14px 18px", background: "#0d0e14", border: "1px solid #2e3044", borderRadius: 8, fontSize: 11, color: "#555a7a", lineHeight: 1.8 }}>
-              <strong style={{ color: "#7eb8ff" }}>Rate used:</strong> $0.000232/min CPU + $0.000116/min RAM = $0.000348/min total&nbsp;&nbsp;·&nbsp;&nbsp;
-              <strong style={{ color: "#7eb8ff" }}>Free trial:</strong> $5.00 one-time (no credit card)
+            <div style={{ padding: "14px 18px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 11, color: "#64748b", lineHeight: 1.8 }}>
+              <strong style={{ color: "#2563eb" }}>Rate used:</strong> $0.000232/min CPU + $0.000116/min RAM = $0.000348/min total&nbsp;&nbsp;·&nbsp;&nbsp;
+              <strong style={{ color: "#2563eb" }}>Free trial:</strong> $5.00 one-time (no credit card)
             </div>
           </div>
         )}
