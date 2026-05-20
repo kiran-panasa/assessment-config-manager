@@ -24,8 +24,8 @@ const T1_COLS = [
   ["Status", "status"], ["Student UID", "studentUid"], ["Booked At", "bookedAt"],
   ["Contest Link", "contestLink"], ["Classroom Details", "classroomDetails"],
 ];
-const T2_COLS = ["Assessment Title", "Date", "Start Time", "End Time", "Unique Exam ID", "EXIT PIN"];
-const T3_COLS = ["Student Name", "NIAT ID", "Skill", "Level", "Contest Date", "Time Slot", "Unique Exam ID"];
+const T2_COLS = ["Assessment Title", "Date", "Start Time", "End Time", "Unique Exam ID", "EXIT PIN", "Topin ID", "Publish Status"];
+const T3_COLS = ["Student Name", "NIAT ID", "Student UID", "Skill", "Level", "Contest Date", "Time Slot", "Unique Exam ID", "Invite"];
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -524,6 +524,16 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                             <td style={S.td}>
                               <span style={{ ...S.badge("#ff9966"), fontFamily: "'DM Mono', monospace", letterSpacing: "0.2em", fontSize: 13 }}>{s.exitPin}</span>
                             </td>
+                            <td style={{ ...S.td, fontSize: 11, color: "#7eb8ff", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap" }}>
+                              {s.topinAssessmentId ? s.topinAssessmentId.slice(0, 8) + "…" : "—"}
+                            </td>
+                            <td style={S.td}>
+                              {s.publishStatus === "published"
+                                ? <span style={S.badge("#00c896")}>Published</span>
+                                : s.publishStatus === "failed"
+                                ? <span style={S.badge("#ff5555")}>Failed</span>
+                                : <span style={S.badge("#555a7a")}>Pending</span>}
+                            </td>
                             <td style={S.td}>
                               <button style={{ ...S.btn("danger"), padding: "5px 12px", fontSize: 11 }} onClick={() => handleDeleteSession(s.id)}>Del</button>
                             </td>
@@ -568,6 +578,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                             <td style={S.td}>{row.studentName || "—"}</td>
                             <td style={S.td}>{row.niatId || "—"}</td>
+                            <td style={{ ...S.td, fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{row.studentUid || "—"}</td>
                             <td style={S.td}>{row.skill || "—"}</td>
                             <td style={S.td}>{row.skillLevel || "—"}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{row.contestDate || "—"}</td>
@@ -575,6 +586,13 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                             <td style={{ ...S.td, fontSize: 11, fontFamily: "'DM Mono', monospace", color: row.mapped ? "#7eb8ff" : "#555a7a" }}>
                               {row.uniqueExamId}
                               {!row.mapped && <span title="No matching exam session found" style={{ marginLeft: 6, color: "#f5a623" }}>⚠</span>}
+                            </td>
+                            <td style={S.td}>
+                              {row.inviteStatus === "sent"
+                                ? <span style={S.badge("#00c896")}>Sent</span>
+                                : row.inviteStatus === "failed"
+                                ? <span style={S.badge("#ff5555")}>Failed</span>
+                                : <span style={S.badge("#555a7a")}>Not Sent</span>}
                             </td>
                           </tr>
                         ))}

@@ -1,0 +1,15 @@
+{
+  "name": "topin-automation-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Local automation scripts for publishing assessments and inviting students on Topin.",
+  "scripts": {
+    "publish": "node publish-sessions.js",
+    "invite": "node invite-students.js"
+  },
+  "dependencies": {
+    "firebase": "^12.13.0",
+    "playwright": "^1.52.0"
+  }
+}
