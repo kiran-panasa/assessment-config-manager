@@ -59,12 +59,13 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
   useEffect(() => {
     if (!credsLoaded || !creds.serverUrl) return;
     setServerOnline(null);
+    const isLocal = creds.serverUrl.includes("localhost") || creds.serverUrl.includes("127.0.0.1");
     const check = () =>
-      fetch(`${creds.serverUrl}/health`, { signal: AbortSignal.timeout(3000) })
+      fetch(`${creds.serverUrl}/health`, { signal: AbortSignal.timeout(isLocal ? 3000 : 40000) })
         .then(r => setServerOnline(r.ok))
         .catch(() => setServerOnline(false));
     check();
-    const id = setInterval(check, 5000);
+    const id = setInterval(check, isLocal ? 5000 : 15000);
     return () => clearInterval(id);
   }, [creds.serverUrl, credsLoaded]);
 
@@ -193,9 +194,13 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
           ))}
         </nav>
         <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", display: "inline-block", flexShrink: 0, background: serverOnline === null ? "#555a7a" : serverOnline ? "#00c896" : "#ff5555" }} />
-          <span style={{ fontSize: 12, fontFamily: "'Inter', sans-serif", color: serverOnline ? "#059669" : serverOnline === null ? "#94a3b8" : "#ef4444" }}>
-            {serverOnline === null ? "Checking…" : serverOnline ? "Server online" : "Server offline"}
+          <span style={{ width: 8, height: 8, borderRadius: "50%", display: "inline-block", flexShrink: 0,
+            background: serverOnline === null ? "#f59e0b" : serverOnline ? "#00c896" : "#ef4444" }} />
+          <span style={{ fontSize: 12, fontFamily: "'Inter', sans-serif",
+            color: serverOnline === null ? "#d97706" : serverOnline ? "#059669" : "#ef4444" }}>
+            {serverOnline === null
+              ? (creds.serverUrl?.includes("localhost") ? "Checking…" : "Waking up server…")
+              : serverOnline ? "Server online" : "Server offline"}
           </span>
         </div>
       </div>
