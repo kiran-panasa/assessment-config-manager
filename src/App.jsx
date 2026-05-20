@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
+import { signOut } from "firebase/auth";
+import { AuthProvider, useAuth } from "./AuthContext";
 import CreateAssessments from "./CreateAssessments";
 import InvitedStudents from "./InvitedStudents";
+import AdminPanel from "./AdminPanel";
+import LoginPage from "./LoginPage";
+import PendingPage from "./PendingPage";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
   setDoc, getDoc, onSnapshot, serverTimestamp,
@@ -215,6 +220,12 @@ const IconInvited = ({ color }) => (
     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
     <circle cx="9" cy="7" r="4" />
     <polyline points="16 11 18 13 22 9" />
+  </svg>
+);
+
+const IconAdmin = ({ color }) => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
   </svg>
 );
 
@@ -628,13 +639,15 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-export default function App() {
+function AppInner() {
+  const { currentUser, userProfile, allowedPages, authLoading } = useAuth();
+
   const [assessments, setAssessments] = useState([]);
   const [skills, setSkills] = useState(DEFAULT_SKILLS);
   const [levels, setLevels] = useState(DEFAULT_LEVELS);
   const [bookingRows, setBookingRows] = useState([]);
   const [examSessions, setExamSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [firestoreLoading, setFirestoreLoading] = useState(true);
   const [page, setPage] = useState("assessments");
   const [tab, setTab] = useState("entry");
   const [toast, setToast] = useState(null);
@@ -650,6 +663,23 @@ export default function App() {
   const [filterLevel, setFilterLevel] = useState("All");
 
   const showToast = (message, type = "success") => setToast({ message, type });
+
+  const prevRoleRef = useRef(null);
+
+  useEffect(() => {
+    if (!userProfile) { prevRoleRef.current = null; return; }
+    const prev = prevRoleRef.current;
+    prevRoleRef.current = userProfile.role;
+    if (prev !== null && prev !== userProfile.role && userProfile.status === "active") {
+      showToast("Your access level has been changed by an admin.", "error");
+    }
+  }, [userProfile?.role]);
+
+  useEffect(() => {
+    if (authLoading || !allowedPages.length) return;
+    const adminOk = page === "admin" && userProfile?.role === "admin";
+    if (!adminOk && !allowedPages.includes(page)) setPage(allowedPages[0]);
+  }, [allowedPages, authLoading]);
 
   const formatDate = (ts) => {
     if (!ts) return "—";
@@ -667,8 +697,8 @@ export default function App() {
     const unsubA = onSnapshot(collection(db, "assessments"), snap => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       data.sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
-      setAssessments(data); setLoading(false);
-    }, () => setLoading(false));
+      setAssessments(data); setFirestoreLoading(false);
+    }, () => setFirestoreLoading(false));
 
     const unsubC = onSnapshot(configRef, snap => {
       if (snap.exists()) { const d = snap.data(); if (d.skills) setSkills(d.skills); if (d.levels) setLevels(d.levels); }
@@ -795,9 +825,19 @@ export default function App() {
     { key: "bookings",    label: "Student Bookings",          Icon: IconBookings },
     { key: "create",      label: "Create Assessments",        Icon: IconCreate },
     { key: "invited",     label: "Invited Students",          Icon: IconInvited },
+    ...(userProfile?.role === "admin" ? [{ key: "admin", label: "Admin Panel", Icon: IconAdmin }] : []),
   ];
 
-  if (loading) return (
+  if (authLoading) return (
+    <div style={{ minHeight: "100vh", background: "#0d0e14", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <style>{css}</style>
+      <span style={{ color: "#555a7a", fontFamily: "'Syne', sans-serif", fontSize: 14 }}>Loading…</span>
+    </div>
+  );
+  if (!currentUser) return <LoginPage />;
+  if (!userProfile || userProfile.status === "pending") return <PendingPage />;
+
+  if (firestoreLoading) return (
     <div style={{ ...S.root, alignItems: "center", justifyContent: "center" }}>
       <span style={{ color: "#555a7a", fontFamily: "'Syne', sans-serif", fontSize: 14 }}>Connecting to database…</span>
     </div>
@@ -812,13 +852,35 @@ export default function App() {
         <nav style={S.sidebarNav}>
           {NAV_ITEMS.map(({ key, label, Icon }) => {
             const active = page === key;
+            const locked = key !== "admin" && !allowedPages.includes(key);
             return (
-              <button key={key} style={S.sidebarItem(active)} onClick={() => setPage(key)}>
-                <Icon color={active ? "#fff" : "#555a7a"} />{label}
+              <button key={key}
+                style={{ ...S.sidebarItem(active), color: locked ? "#3a3d52" : active ? "#fff" : "#555a7a", cursor: locked ? "not-allowed" : "pointer" }}
+                title={locked ? "Contact admin for access" : undefined}
+                onClick={() => { if (locked) { showToast("Contact admin for access.", "error"); return; } setPage(key); }}>
+                <Icon color={locked ? "#3a3d52" : active ? "#fff" : "#555a7a"} />
+                {label}
+                {locked && <span style={{ marginLeft: "auto", fontSize: 10, color: "#3a3d52" }}>🔒</span>}
               </button>
             );
           })}
         </nav>
+        <div style={{ padding: "14px 12px", borderTop: "1px solid #1e2030" }}>
+          <div style={{ fontSize: 11, color: "#7eb8ff", fontFamily: "'DM Mono', monospace", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 4 }}>
+            {userProfile.displayName || userProfile.email}
+          </div>
+          <div style={{ fontSize: 10, color: "#3a3d52", fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.1em", paddingLeft: 4 }}>
+            {userProfile.role ? userProfile.role.replace(/-/g, " ") : "No Role"}
+          </div>
+          <button onClick={() => signOut(auth)} style={{
+            width: "100%", background: "transparent", border: "1px solid #2e3044",
+            borderRadius: 6, color: "#555a7a", padding: "8px 12px",
+            fontFamily: "'Syne', sans-serif", fontWeight: 600, fontSize: 11,
+            cursor: "pointer", textAlign: "left",
+          }}>
+            Sign Out
+          </button>
+        </div>
       </aside>
 
       <div style={S.main}>
@@ -1031,9 +1093,21 @@ export default function App() {
             showToast={showToast}
           />
         )}
+
+        {page === "admin" && (
+          <AdminPanel S={S} showToast={showToast} />
+        )}
       </div>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   );
 }
