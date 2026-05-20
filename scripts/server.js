@@ -127,8 +127,22 @@ async function trySelector(page, selectors, timeout = 8000) {
 
 async function loginToTopin(page, mobile, otp) {
   broadcast("info", "Navigating to Topin login…");
-  await page.goto("https://topin.tech", { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(2500);
+  await page.goto("https://topin.tech", { waitUntil: "networkidle" });
+  await page.waitForTimeout(3000);
+
+  const currentUrl = page.url();
+  broadcast("info", `  Page URL: ${currentUrl}`);
+
+  // Wait for any input to appear, then log all of them for debugging
+  try { await page.waitForSelector("input", { timeout: 10000 }); } catch { /* none found */ }
+  const inputs = await page.evaluate(() =>
+    [...document.querySelectorAll("input")].map(el => ({
+      type: el.type, name: el.name || "—",
+      placeholder: el.placeholder || "—", id: el.id || "—",
+      visible: el.offsetWidth > 0 && el.offsetHeight > 0,
+    }))
+  );
+  broadcast("info", `  Inputs found (${inputs.length}): ${JSON.stringify(inputs)}`);
 
   // Phone input — try multiple possible selectors
   const phoneSel = await trySelector(page, [
@@ -138,8 +152,10 @@ async function loginToTopin(page, mobile, otp) {
     'input[placeholder*="phone" i]',
     'input[placeholder*="mobile" i]',
     'input[placeholder*="number" i]',
+    'input[placeholder*="enter" i]',
+    'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])',
   ], 12000);
-  if (!phoneSel) throw new Error("Could not find phone/mobile input on Topin login page. The page layout may have changed.");
+  if (!phoneSel) throw new Error("Could not find phone/mobile input on Topin login page. Check the 'Inputs found' log line above.");
   await page.fill(phoneSel, mobile);
   broadcast("info", "  Entered phone number");
 
