@@ -198,8 +198,14 @@ async function loginToTopin(page, mobile, otp, loginUrl) {
   ], 5000);
   if (!verifyBtnSel) throw new Error("Could not find Verify OTP button on Topin login page.");
   await page.click(verifyBtnSel);
-  await page.waitForNavigation({ waitUntil: "load", timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(4000);
 
+  // Warm up the config.topin.tech domain so auth cookies are set before we
+  // navigate to individual assessment URLs — prevents the ?auth_code= redirect
+  // from interrupting each assessment page load.
+  broadcast("info", "  Initialising session on config.topin.tech…");
+  await page.goto("https://config.topin.tech", { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(3000);
   broadcast("success", "Logged in to Topin");
 }
 
@@ -260,18 +266,30 @@ async function publishOneSession(page, session, assessments) {
   );
   if (!config?.url) throw new Error(`No config URL for ${session.skill} - L${session.level}`);
 
-  // ── 1. Open config URL and clone ──────────────────────────────────────────
+  // ── 1. Open config URL — handle ?auth_code= redirect gracefully ──────────
   broadcast("info", "  Opening config URL…");
-  await page.goto(config.url, { waitUntil: "load", timeout: 30000 });
+  try {
+    await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 });
+  } catch (e) {
+    if (!e.message.includes("interrupted")) throw e;
+    // Auth redirect interrupted the navigation — wait for it to settle
+    broadcast("info", "  Auth redirect detected, waiting to settle…");
+    await page.waitForTimeout(4000);
+    // Re-navigate to the target URL now that auth cookies are set
+    await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 });
+  }
+  await page.waitForTimeout(2000);
+
+  // Wait for the clone button explicitly before clicking
+  await page.waitForSelector('button[aria-label="clone-assessment"]', { timeout: 20000 });
   await page.click('button[aria-label="clone-assessment"]');
-  await page.waitForNavigation({ waitUntil: "load", timeout: 30000 }).catch(() => {});
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(3000);
   broadcast("info", "  Cloned — on Section Details");
 
   // ── 2. Section Details: no changes, just Save & Next ─────────────────────
+  await page.waitForSelector('button:has-text("Save & Next")', { timeout: 15000 });
   await page.click('button:has-text("Save & Next")');
-  await page.waitForNavigation({ waitUntil: "load", timeout: 30000 }).catch(() => {});
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(3000);
   broadcast("info", "  On Final Review — filling details…");
 
   // ── 3. Final Review: Name of Assessment ───────────────────────────────────
@@ -298,11 +316,12 @@ async function publishOneSession(page, session, assessments) {
   await exitInput.fill(session.exitPin);
 
   // ── 8. Save & Next → Publish & Invite page ───────────────────────────────
+  await page.waitForSelector('button:has-text("Save & Next")', { timeout: 15000 });
   await page.click('button:has-text("Save & Next")');
-  await page.waitForNavigation({ waitUntil: "load", timeout: 30000 }).catch(() => {});
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(3000);
   broadcast("info", "  On Publish & Invite page…");
 
+  await page.waitForSelector('button:has-text("Publish Assessment")', { timeout: 15000 });
   await page.click('button:has-text("Publish Assessment")');
 
   // Confirmation modal appears — click "Yes, I Agree"
