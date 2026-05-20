@@ -127,7 +127,10 @@ async function trySelector(page, selectors, timeout = 8000) {
 
 async function loginToTopin(page, mobile, otp) {
   broadcast("info", "Navigating to Topin login…");
-  await page.goto("https://topin.tech", { waitUntil: "networkidle" });
+  await page.goto(
+    "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp&WINDOW_MODE=IN_APP",
+    { waitUntil: "networkidle" }
+  );
   await page.waitForTimeout(3000);
 
   const currentUrl = page.url();
