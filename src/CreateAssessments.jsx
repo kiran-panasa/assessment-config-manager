@@ -23,6 +23,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     apiEndpoint: "", apiToken: "",
     uidField: "student_uid", assessIdField: "assessment_id",
     serverUrl: "http://localhost:3001",
+    topinLoginUrl: "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp&WINDOW_MODE=IN_APP",
   });
   const [credsSaved, setCredsSaved] = useState(false);
   const [credsLoaded, setCredsLoaded] = useState(false);
@@ -143,7 +144,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
       await fetch(`${creds.serverUrl}/publish`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile: creds.mobile, otp: creds.otp, date: selDate || null }),
+        body: JSON.stringify({ mobile: creds.mobile, otp: creds.otp, date: selDate || null, topinLoginUrl: creds.topinLoginUrl || null }),
       });
     } catch {
       addLog("error", "Failed to reach server.");
@@ -240,6 +241,16 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
             {/* Topin login */}
             <div style={S.card}>
               <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>Topin Login</div>
+              <div style={{ marginBottom: 20 }}>
+                <label style={S.label}>Topin Login URL</label>
+                <input style={S.input} type="url"
+                  placeholder="https://accounts.ccbp.in/login?client_id=topin_config…"
+                  value={creds.topinLoginUrl}
+                  onChange={e => setCreds(p => ({ ...p, topinLoginUrl: e.target.value.trim() }))} />
+                <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
+                  Update this if the Topin login page URL ever changes — no redeploy needed.
+                </div>
+              </div>
               <div style={S.grid2}>
                 <div>
                   <label style={S.label}>Mobile Number</label>

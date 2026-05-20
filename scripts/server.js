@@ -62,13 +62,16 @@ app.get("/progress", (req, res) => {
   req.on("close", () => clients.delete(res));
 });
 
+const DEFAULT_TOPIN_LOGIN_URL =
+  "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp&WINDOW_MODE=IN_APP";
+
 app.post("/publish", async (req, res) => {
-  const { mobile, otp, date } = req.body;
+  const { mobile, otp, date, topinLoginUrl } = req.body;
   if (!mobile || !otp) return res.status(400).json({ error: "mobile and otp are required" });
   res.json({ started: true });
   // Small delay so the browser's EventSource connection is established first
   await new Promise(r => setTimeout(r, 400));
-  runPublish(mobile, otp, date || null).catch(err =>
+  runPublish(mobile, otp, date || null, topinLoginUrl || DEFAULT_TOPIN_LOGIN_URL).catch(err =>
     broadcast("error", `Fatal error: ${err.message}`),
   );
 });
@@ -125,12 +128,9 @@ async function trySelector(page, selectors, timeout = 8000) {
   return null;
 }
 
-async function loginToTopin(page, mobile, otp) {
+async function loginToTopin(page, mobile, otp, loginUrl) {
   broadcast("info", "Navigating to Topin login…");
-  await page.goto(
-    "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp&WINDOW_MODE=IN_APP",
-    { waitUntil: "networkidle" }
-  );
+  await page.goto(loginUrl, { waitUntil: "networkidle" });
   await page.waitForTimeout(3000);
 
   const currentUrl = page.url();
@@ -351,7 +351,7 @@ async function logJob(type, startMs, stats) {
 
 // ── Publish: main loop ────────────────────────────────────────────────────────
 
-async function runPublish(mobile, otp, date) {
+async function runPublish(mobile, otp, date, loginUrl) {
   const startMs = Date.now();
   broadcast("info", "Fetching sessions from Firestore…");
   const { assessments, sessions } = await fetchPublishData(date);
@@ -374,7 +374,7 @@ async function runPublish(mobile, otp, date) {
   let passed = 0, failed = 0;
 
   try {
-    await loginToTopin(page, mobile, otp);
+    await loginToTopin(page, mobile, otp, loginUrl);
 
     for (const session of sessions) {
       const num = passed + failed + 1;
