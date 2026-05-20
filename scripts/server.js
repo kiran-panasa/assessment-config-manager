@@ -119,33 +119,18 @@ async function loginToTopin(page, mobile, otp) {
   broadcast("info", "Navigating to Topin login…");
   await page.goto("https://topin.tech", { waitUntil: "networkidle" });
 
-  // TODO: adjust selectors to match the actual Topin login page
-  await page.waitForSelector(
-    'input[type="tel"], input[name*="mobile" i], input[placeholder*="mobile" i], input[placeholder*="phone" i]',
-    { timeout: 15000 },
-  );
-  await page.fill(
-    'input[type="tel"], input[name*="mobile" i], input[placeholder*="mobile" i], input[placeholder*="phone" i]',
-    mobile,
-  );
+  await page.waitForSelector('input[name="phone"]', { timeout: 15000 });
+  await page.fill('input[name="phone"]', mobile);
 
-  await page.click(
-    'button:has-text("Send OTP"), button:has-text("Get OTP"), button:has-text("Request OTP"), button:has-text("Continue")',
-  );
+  await page.click('button[data-testid="getOTPButton"]');
   await page.waitForTimeout(2000);
 
-  await page.waitForSelector(
-    'input[name*="otp" i], input[placeholder*="otp" i], input[placeholder*="code" i]',
-    { timeout: 15000 },
-  );
-  await page.fill(
-    'input[name*="otp" i], input[placeholder*="otp" i], input[placeholder*="code" i]',
-    otp,
-  );
+  // Split OTP — 6 individual boxes; click the first then type all digits
+  await page.waitForSelector('input[autocomplete="one-time-code"]', { timeout: 15000 });
+  await page.click('input[autocomplete="one-time-code"]');
+  await page.keyboard.type(otp);
 
-  await page.click(
-    'button:has-text("Verify"), button:has-text("Login"), button:has-text("Submit"), button[type="submit"]',
-  );
+  await page.click('button[data-testid="multi-step-verify-otp-button"]');
   await page.waitForNavigation({ waitUntil: "networkidle" }).catch(() => {});
 
   broadcast("success", "Logged in to Topin");
@@ -153,49 +138,135 @@ async function loginToTopin(page, mobile, otp) {
 
 // ── Publish: clone, fill, publish one session ─────────────────────────────────
 
+// ── Date-time picker helper ───────────────────────────────────────────────────
+// Handles the custom calendar + time-list picker on the Final Review page.
+// dateStr = "YYYY-MM-DD", timeStr = "4:00 PM" (12-hr, no leading zero on hour)
+
+// react-datepicker with scroll-type month/year dropdowns.
+// dateStr = "YYYY-MM-DD", timeStr = "4:00 PM" (12-hr, no leading zero on hour)
+async function selectDateTimePicker(page, labelText, dateStr, timeStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const MONTHS = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+  const targetMonth = MONTHS[month - 1];
+
+  // Open the picker by clicking the input (located below its label)
+  await page.locator(`text="${labelText}"`).locator('xpath=..').locator('input').click();
+  await page.waitForTimeout(500);
+
+  // Check current month/year in header (e.g. "May 2026")
+  const currentHeader = await page.locator('.react-datepicker__current-month').first().textContent();
+
+  if (!currentHeader.includes(targetMonth) || !currentHeader.includes(String(year))) {
+    // Open month scroll-dropdown and click the target month
+    await page.locator('.react-datepicker__month-read-view').click();
+    await page.waitForTimeout(300);
+    await page.locator(`.react-datepicker__month-option:has-text("${targetMonth}")`).click();
+    await page.waitForTimeout(200);
+
+    // Open year scroll-dropdown and click the target year if still wrong
+    const afterMonth = await page.locator('.react-datepicker__current-month').first().textContent();
+    if (!afterMonth.includes(String(year))) {
+      await page.locator('.react-datepicker__year-read-view').click();
+      await page.waitForTimeout(300);
+      await page.locator(`.react-datepicker__year-option:has-text("${year}")`).click();
+      await page.waitForTimeout(200);
+    }
+  }
+
+  // Click the correct day — exclude greyed-out outside-month days
+  await page.locator(
+    `.react-datepicker__day:not(.react-datepicker__day--outside-month):text-is("${day}")`
+  ).first().click();
+  await page.waitForTimeout(300);
+
+  // Click the matching time in the time list (e.g. "4:00 PM")
+  await page.locator(`.react-datepicker__time-list-item:has-text("${timeStr}")`).first().click();
+  await page.waitForTimeout(300);
+}
+
+// ── Publish one session (3-step flow) ────────────────────────────────────────
+
 async function publishOneSession(page, session, assessments) {
   const config = assessments.find(
     a => a.skill === session.skill && a.level === `L${session.level}`,
   );
   if (!config?.url) throw new Error(`No config URL for ${session.skill} - L${session.level}`);
 
-  broadcast("info", `  Opening config URL…`);
+  // ── 1. Open config URL and clone ──────────────────────────────────────────
+  broadcast("info", "  Opening config URL…");
   await page.goto(config.url, { waitUntil: "networkidle" });
-
-  // TODO: adjust Clone selector to match actual Topin UI
-  await page.click(
-    'button:has-text("Clone"), button:has-text("Duplicate"), a:has-text("Clone"), [data-action="clone"]',
-  );
+  await page.click('button[aria-label="clone-assessment"]');
   await page.waitForNavigation({ waitUntil: "networkidle" }).catch(() => {});
   await page.waitForTimeout(1500);
-  broadcast("info", "  Cloned");
+  broadcast("info", "  Cloned — on Section Details");
 
-  // TODO: adjust field selectors if needed
-  await page.fill(
-    'input[name*="title" i], input[name*="name" i], input[placeholder*="title" i], input[placeholder*="assessment name" i]',
-    session.assessmentTitle,
-  );
-  await page.fill('input[type="date"], input[name*="date" i]', session.dateOfAssessment);
-  await page.fill('input[name*="start" i], input[placeholder*="start time" i]', to24Hr(session.startTimeSlot));
-  await page.fill('input[name*="end" i], input[placeholder*="end time" i]',     to24Hr(session.endTimeSlot));
-  await page.fill('input[name*="pin" i], input[name*="exit" i], input[placeholder*="pin" i]', session.exitPin);
+  // ── 2. Section Details: no changes, just Save & Next ─────────────────────
+  await page.click('button:has-text("Save & Next")');
+  await page.waitForNavigation({ waitUntil: "networkidle" }).catch(() => {});
+  await page.waitForTimeout(1500);
+  broadcast("info", "  On Final Review — filling details…");
 
-  await page.click(
-    'button:has-text("Publish"), button:has-text("Save & Publish"), button[type="submit"]:has-text("Publish")',
-  );
-  await page.waitForTimeout(2500);
+  // ── 3. Final Review: Name of Assessment ───────────────────────────────────
+  const nameInput = page.locator('input[placeholder*="Name of Assessment" i], input[name*="title" i], input[name*="name" i]').first();
+  await nameInput.click({ clickCount: 3 });
+  await nameInput.fill(session.assessmentTitle);
+
+  // ── 4. Final Review: Tags — add Unique Exam ID ────────────────────────────
+  await page.click('[placeholder="Add Tags"]');
+  await page.keyboard.type(session.uniqueExamId);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+
+  // ── 5. Final Review: Start Date & Time ───────────────────────────────────
+  await selectDateTimePicker(page, 'Start Date & Time', session.dateOfAssessment, session.startTimeSlot);
+
+  // ── 6. Final Review: End Date & Time ─────────────────────────────────────
+  await selectDateTimePicker(page, 'End Date & Time', session.dateOfAssessment, session.endTimeSlot);
+
+  // ── 7. Final Review: Exit Password (under Internal Admin Options) ─────────
+  const exitInput = page.getByLabel('Exit Password');
+  await exitInput.scrollIntoViewIfNeeded();
+  await exitInput.click({ clickCount: 3 });
+  await exitInput.fill(session.exitPin);
+
+  // ── 8. Save & Next → Publish & Invite page ───────────────────────────────
+  await page.click('button:has-text("Save & Next")');
+  await page.waitForNavigation({ waitUntil: "networkidle" }).catch(() => {});
+  await page.waitForTimeout(1500);
+  broadcast("info", "  On Publish & Invite page…");
+
+  await page.click('button:has-text("Publish Assessment")');
+
+  // Confirmation modal appears — click "Yes, I Agree"
+  await page.waitForSelector('button[data-testid="agree-button"]', { timeout: 10000 });
+  await page.click('button[data-testid="agree-button"]');
+  await page.waitForTimeout(3000);
   broadcast("info", "  Published — extracting Assessment ID…");
 
-  // TODO: adjust selector to find the Assessment Link element
-  const linkEl = await page.$(
-    'a[href*="org_id"], input[value*="org_id"], [class*="assessment-link"] a, [class*="share"] a[href*="assessment.topin"]',
-  );
-  if (!linkEl) throw new Error("Could not find Assessment Link on page. Adjust the selector in server.js.");
+  // Extract org_id from the Assessment Link box.
+  // Tries input.value (DOM property) first, then text content of any element.
+  const assessmentId = await page.evaluate(() => {
+    // Check inputs — value property (not HTML attribute) holds the live value
+    for (const el of document.querySelectorAll("input")) {
+      if (el.value && el.value.includes("org_id=")) {
+        try { return new URL(el.value).searchParams.get("org_id"); } catch {}
+      }
+    }
+    // Fallback: scan all text nodes for the URL pattern
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const t = node.textContent.trim();
+      if (t.includes("org_id=") && t.includes("assessment.topin.tech")) {
+        const m = t.match(/org_id=([0-9a-f-]{36})/i);
+        if (m) return m[1];
+      }
+    }
+    return null;
+  });
 
-  const href = (await linkEl.getAttribute("href")) || (await linkEl.getAttribute("value")) || "";
-  const assessmentId = new URL(href).searchParams.get("org_id");
-  if (!assessmentId) throw new Error(`Could not extract org_id from: ${href}`);
-
+  if (!assessmentId) throw new Error("Could not find Assessment Link on page after publishing.");
   return assessmentId;
 }
 
