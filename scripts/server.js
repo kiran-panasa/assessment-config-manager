@@ -115,22 +115,70 @@ async function fetchPublishData(date) {
 
 // ── Publish: Topin browser login ──────────────────────────────────────────────
 
+async function trySelector(page, selectors, timeout = 8000) {
+  for (const sel of selectors) {
+    try {
+      await page.waitForSelector(sel, { timeout });
+      return sel;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
 async function loginToTopin(page, mobile, otp) {
   broadcast("info", "Navigating to Topin login…");
-  await page.goto("https://topin.tech", { waitUntil: "networkidle" });
+  await page.goto("https://topin.tech", { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2500);
 
-  await page.waitForSelector('input[name="phone"]', { timeout: 15000 });
-  await page.fill('input[name="phone"]', mobile);
+  // Phone input — try multiple possible selectors
+  const phoneSel = await trySelector(page, [
+    'input[name="phone"]',
+    'input[name="mobile"]',
+    'input[type="tel"]',
+    'input[placeholder*="phone" i]',
+    'input[placeholder*="mobile" i]',
+    'input[placeholder*="number" i]',
+  ], 12000);
+  if (!phoneSel) throw new Error("Could not find phone/mobile input on Topin login page. The page layout may have changed.");
+  await page.fill(phoneSel, mobile);
+  broadcast("info", "  Entered phone number");
 
-  await page.click('button[data-testid="getOTPButton"]');
-  await page.waitForTimeout(2000);
+  // Get OTP button
+  const otpBtnSel = await trySelector(page, [
+    'button[data-testid="getOTPButton"]',
+    'button:has-text("Get OTP")',
+    'button:has-text("Send OTP")',
+    'button:has-text("Request OTP")',
+    'button[type="submit"]',
+  ], 5000);
+  if (!otpBtnSel) throw new Error("Could not find Get OTP button on Topin login page.");
+  await page.click(otpBtnSel);
+  await page.waitForTimeout(2500);
 
-  // Split OTP — 6 individual boxes; click the first then type all digits
-  await page.waitForSelector('input[autocomplete="one-time-code"]', { timeout: 15000 });
-  await page.click('input[autocomplete="one-time-code"]');
+  // OTP input — split boxes or single field
+  const otpInputSel = await trySelector(page, [
+    'input[autocomplete="one-time-code"]',
+    'input[name="otp"]',
+    'input[placeholder*="otp" i]',
+    'input[placeholder*="code" i]',
+    'input[placeholder*="enter" i]',
+  ], 12000);
+  if (!otpInputSel) throw new Error("Could not find OTP input on Topin login page.");
+  await page.click(otpInputSel);
   await page.keyboard.type(otp);
+  broadcast("info", "  Entered OTP");
 
-  await page.click('button[data-testid="multi-step-verify-otp-button"]');
+  // Verify OTP button
+  const verifyBtnSel = await trySelector(page, [
+    'button[data-testid="multi-step-verify-otp-button"]',
+    'button:has-text("Verify OTP")',
+    'button:has-text("Verify")',
+    'button:has-text("Login")',
+    'button:has-text("Sign In")',
+    'button[type="submit"]',
+  ], 5000);
+  if (!verifyBtnSel) throw new Error("Could not find Verify OTP button on Topin login page.");
+  await page.click(verifyBtnSel);
   await page.waitForNavigation({ waitUntil: "networkidle" }).catch(() => {});
 
   broadcast("success", "Logged in to Topin");
