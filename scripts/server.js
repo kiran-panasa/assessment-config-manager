@@ -130,7 +130,7 @@ async function trySelector(page, selectors, timeout = 8000) {
 
 async function loginToTopin(page, mobile, otp, loginUrl) {
   broadcast("info", "Navigating to Topin login…");
-  await page.goto(loginUrl, { waitUntil: "networkidle" });
+  await page.goto(loginUrl, { waitUntil: "load", timeout: 30000 });
   await page.waitForTimeout(3000);
 
   const currentUrl = page.url();
@@ -198,7 +198,7 @@ async function loginToTopin(page, mobile, otp, loginUrl) {
   ], 5000);
   if (!verifyBtnSel) throw new Error("Could not find Verify OTP button on Topin login page.");
   await page.click(verifyBtnSel);
-  await page.waitForNavigation({ waitUntil: "networkidle" }).catch(() => {});
+  await page.waitForNavigation({ waitUntil: "load", timeout: 30000 }).catch(() => {});
 
   broadcast("success", "Logged in to Topin");
 }
@@ -262,15 +262,15 @@ async function publishOneSession(page, session, assessments) {
 
   // ── 1. Open config URL and clone ──────────────────────────────────────────
   broadcast("info", "  Opening config URL…");
-  await page.goto(config.url, { waitUntil: "networkidle" });
+  await page.goto(config.url, { waitUntil: "load", timeout: 30000 });
   await page.click('button[aria-label="clone-assessment"]');
-  await page.waitForNavigation({ waitUntil: "networkidle" }).catch(() => {});
+  await page.waitForNavigation({ waitUntil: "load", timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(1500);
   broadcast("info", "  Cloned — on Section Details");
 
   // ── 2. Section Details: no changes, just Save & Next ─────────────────────
   await page.click('button:has-text("Save & Next")');
-  await page.waitForNavigation({ waitUntil: "networkidle" }).catch(() => {});
+  await page.waitForNavigation({ waitUntil: "load", timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(1500);
   broadcast("info", "  On Final Review — filling details…");
 
@@ -299,7 +299,7 @@ async function publishOneSession(page, session, assessments) {
 
   // ── 8. Save & Next → Publish & Invite page ───────────────────────────────
   await page.click('button:has-text("Save & Next")');
-  await page.waitForNavigation({ waitUntil: "networkidle" }).catch(() => {});
+  await page.waitForNavigation({ waitUntil: "load", timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(1500);
   broadcast("info", "  On Publish & Invite page…");
 
