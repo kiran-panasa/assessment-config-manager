@@ -4,9 +4,14 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "fire
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { BOOTSTRAP_EMAIL } from "./AuthContext";
 
-const CSS = `@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #0d0e14; }`;
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #f0f4f8; }
+  .login-input:focus { border-color: #00b386 !important; box-shadow: 0 0 0 3px rgba(0,195,150,0.12) !important; }
+  .login-btn-primary:hover { background: #00b386 !important; }
+  .login-switch:hover { text-decoration: underline; }
+`;
 
 const FIREBASE_ERRORS = {
   "auth/user-not-found": "No account found with this email.",
@@ -18,23 +23,25 @@ const FIREBASE_ERRORS = {
   "auth/too-many-requests": "Too many attempts. Please try again later.",
 };
 
-const inputStyle = {
-  width: "100%", background: "#0d0e14", border: "1px solid #2e3044",
-  borderRadius: 8, color: "#e0e0e8", padding: "11px 14px",
-  fontFamily: "'DM Mono', monospace", fontSize: 13, outline: "none", boxSizing: "border-box",
-};
-
-const labelStyle = {
-  fontSize: 11, fontFamily: "'Syne', sans-serif", fontWeight: 700,
-  letterSpacing: "0.12em", color: "#555a7a", textTransform: "uppercase",
-  marginBottom: 8, display: "block",
-};
+const EyeIcon = ({ open }) => open ? (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+) : (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+    <line x1="1" y1="1" x2="23" y2="23"/>
+  </svg>
+);
 
 export default function LoginPage() {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -65,86 +72,148 @@ export default function LoginPage() {
     }
   };
 
-  const switchMode = () => { setMode(m => m === "login" ? "signup" : "login"); setError(""); };
+  const switchMode = () => { setMode(m => m === "login" ? "signup" : "login"); setError(""); setShowPassword(false); };
+
+  const inputBase = {
+    width: "100%", background: "#fff",
+    border: "1px solid #dde3ed", borderRadius: 10,
+    color: "#1a2033", padding: "11px 14px",
+    fontFamily: "'Inter', sans-serif", fontSize: 14,
+    outline: "none", boxSizing: "border-box",
+    transition: "border-color 0.15s, box-shadow 0.15s",
+  };
+
+  const labelBase = {
+    fontSize: 12, fontFamily: "'Inter', sans-serif", fontWeight: 600,
+    color: "#64748b", marginBottom: 7, display: "block", letterSpacing: "0.01em",
+  };
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#0d0e14",
+      minHeight: "100vh",
+      background: "linear-gradient(135deg, #e8f5f0 0%, #f0f4f8 50%, #ebe8f5 100%)",
       display: "flex", alignItems: "center", justifyContent: "center",
-      fontFamily: "'DM Mono', monospace", color: "#e0e0e8",
+      fontFamily: "'Inter', sans-serif", color: "#1a2033",
     }}>
       <style>{CSS}</style>
-      <div style={{ width: "100%", maxWidth: 400, padding: "0 24px" }}>
+      <div style={{ width: "100%", maxWidth: 420, padding: "0 20px" }}>
 
-        <div style={{ textAlign: "center", marginBottom: 36 }}>
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{
-            width: 40, height: 40, borderRadius: "50%", background: "#00c89620",
-            border: "1px solid #00c896", margin: "0 auto 16px",
+            width: 48, height: 48, borderRadius: 14, background: "#00c896",
+            margin: "0 auto 16px",
             display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 4px 14px rgba(0,200,150,0.35)",
           }}>
-            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#00c896" }} />
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
           </div>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 22, color: "#fff" }}>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 22, color: "#0f172a", letterSpacing: "-0.4px" }}>
             NxtWave Admin
           </div>
-          <div style={{ fontSize: 12, color: "#555a7a", marginTop: 6 }}>
-            {mode === "login" ? "Sign in to your account" : "Request access"}
+          <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 5 }}>
+            {mode === "login" ? "Welcome back — sign in to continue" : "Create your account"}
           </div>
         </div>
 
-        <div style={{ background: "#13141e", border: "1px solid #1e2030", borderRadius: 12, padding: 32 }}>
+        {/* Card */}
+        <div style={{
+          background: "#fff", borderRadius: 16, padding: "32px 32px 28px",
+          boxShadow: "0 4px 24px rgba(15,23,42,0.08), 0 1px 3px rgba(15,23,42,0.06)",
+          border: "1px solid rgba(220,228,240,0.8)",
+        }}>
           <form onSubmit={handleSubmit}>
+
             {mode === "signup" && (
-              <div style={{ marginBottom: 18 }}>
-                <label style={labelStyle}>Full Name</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)}
-                  placeholder="Your name" style={inputStyle} />
+              <div style={{ marginBottom: 16 }}>
+                <label style={labelBase}>Full Name</label>
+                <input
+                  className="login-input"
+                  type="text" value={name} onChange={e => setName(e.target.value)}
+                  placeholder="Your full name"
+                  style={inputBase}
+                />
               </div>
             )}
 
-            <div style={{ marginBottom: 18 }}>
-              <label style={labelStyle}>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com" required style={inputStyle} />
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelBase}>Email address</label>
+              <input
+                className="login-input"
+                type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com" required
+                style={inputBase}
+              />
             </div>
 
-            <div style={{ marginBottom: error ? 16 : 24 }}>
-              <label style={labelStyle}>Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                placeholder={mode === "signup" ? "Min. 6 characters" : "Your password"}
-                required style={inputStyle} />
+            <div style={{ marginBottom: error ? 14 : 22 }}>
+              <label style={labelBase}>Password</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  className="login-input"
+                  type={showPassword ? "text" : "password"}
+                  value={password} onChange={e => setPassword(e.target.value)}
+                  placeholder={mode === "signup" ? "At least 6 characters" : "Enter your password"}
+                  required
+                  style={{ ...inputBase, paddingRight: 44 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  style={{
+                    position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                    background: "none", border: "none", cursor: "pointer",
+                    color: "#94a3b8", padding: 2, display: "flex", alignItems: "center",
+                  }}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
             </div>
 
             {error && (
               <div style={{
-                marginBottom: 20, padding: "10px 14px",
-                background: "#ff444414", border: "1px solid #ff444440",
-                borderRadius: 8, fontSize: 12, color: "#ff7777",
+                marginBottom: 16, padding: "10px 14px",
+                background: "#fef2f2", border: "1px solid #fecaca",
+                borderRadius: 8, fontSize: 13, color: "#dc2626", lineHeight: 1.5,
               }}>
                 {error}
               </div>
             )}
 
-            <button type="submit" disabled={loading} style={{
-              width: "100%", padding: 12, borderRadius: 8,
-              fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14,
-              cursor: loading ? "not-allowed" : "pointer",
-              background: "#00c896", color: "#0d0e14", border: "none",
-              opacity: loading ? 0.6 : 1, transition: "opacity 0.15s",
-            }}>
+            <button
+              type="submit" disabled={loading}
+              className="login-btn-primary"
+              style={{
+                width: "100%", padding: "12px", borderRadius: 10,
+                fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14,
+                cursor: loading ? "not-allowed" : "pointer",
+                background: "#00c896", color: "#fff", border: "none",
+                opacity: loading ? 0.7 : 1,
+                transition: "background 0.15s, opacity 0.15s",
+                letterSpacing: "0.01em",
+              }}>
               {loading ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
             </button>
           </form>
 
-          <div style={{ textAlign: "center", marginTop: 20, fontSize: 12, color: "#555a7a" }}>
+          <div style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "#94a3b8" }}>
             {mode === "login" ? "Don't have an account? " : "Already have an account? "}
-            <button onClick={switchMode} style={{
-              background: "none", border: "none", color: "#00c896",
-              cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 12, padding: 0,
+            <button onClick={switchMode} className="login-switch" style={{
+              background: "none", border: "none", color: "#00b386",
+              cursor: "pointer", fontFamily: "'Inter', sans-serif",
+              fontWeight: 600, fontSize: 13, padding: 0,
             }}>
               {mode === "login" ? "Sign up" : "Sign in"}
             </button>
           </div>
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: "#cbd5e1" }}>
+          NxtWave Internal Tool · Restricted Access
         </div>
       </div>
     </div>
