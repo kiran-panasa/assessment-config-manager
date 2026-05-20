@@ -17,7 +17,7 @@ import express from "express";
 import cors from "cors";
 import { chromium } from "playwright";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs, doc, updateDoc } from "firebase/firestore";
+import { getFirestore, collection, getDocs, doc, updateDoc, addDoc } from "firebase/firestore";
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
 
@@ -270,9 +270,22 @@ async function publishOneSession(page, session, assessments) {
   return assessmentId;
 }
 
+// ── Job logger (writes duration to Firestore for credit tracking) ─────────────
+
+async function logJob(type, startMs, stats) {
+  const durationMinutes = parseFloat(((Date.now() - startMs) / 60000).toFixed(2));
+  const month = new Date().toISOString().slice(0, 7); // "2026-05"
+  await addDoc(collection(db, "jobLogs"), {
+    type, durationMinutes, month,
+    loggedAt: new Date().toISOString(),
+    ...stats,
+  }).catch(() => {});
+}
+
 // ── Publish: main loop ────────────────────────────────────────────────────────
 
 async function runPublish(mobile, otp, date) {
+  const startMs = Date.now();
   broadcast("info", "Fetching sessions from Firestore…");
   const { assessments, sessions } = await fetchPublishData(date);
 
@@ -284,7 +297,10 @@ async function runPublish(mobile, otp, date) {
 
   broadcast("info", `Found ${sessions.length} unpublished session(s)${date ? ` for ${date}` : ""}`);
 
-  const browser = await chromium.launch({ headless: false, slowMo: 300 });
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+  });
   const page    = await browser.newPage();
   page.setDefaultTimeout(20000);
 
@@ -321,6 +337,7 @@ async function runPublish(mobile, otp, date) {
     await browser.close();
   }
 
+  await logJob("publish", startMs, { passed, failed });
   broadcast("done", `Publish complete — ${passed} published, ${failed} failed`, { passed, failed });
 }
 
@@ -374,6 +391,7 @@ async function callInviteAPI(endpoint, token, uidField, assessIdField, studentUi
 // ── Invite: main loop ─────────────────────────────────────────────────────────
 
 async function runInvite(apiEndpoint, apiToken, uidField, assessIdField, date) {
+  const startMs = Date.now();
   broadcast("info", "Fetching bookings from Firestore…");
   const { bookings, sessionMap } = await fetchInviteData(date);
 
@@ -426,12 +444,13 @@ async function runInvite(apiEndpoint, apiToken, uidField, assessIdField, date) {
     await new Promise(r => setTimeout(r, RATE_LIMIT_MS));
   }
 
+  await logJob("invite", startMs, { sent, failed });
   broadcast("done", `Invite complete — ${sent} sent, ${failed} failed`, { sent, failed });
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`\n🚀 Automation server running at http://localhost:${PORT}`);
   console.log(`   GET  /health    — status check`);
