@@ -136,8 +136,10 @@ async function loginToTopin(page, mobile, otp, loginUrl) {
   const currentUrl = page.url();
   broadcast("info", `  Page URL: ${currentUrl}`);
 
-  // Wait for any input to appear, then log all of them for debugging
-  try { await page.waitForSelector("input", { timeout: 10000 }); } catch { /* none found */ }
+  // Wait up to 15s for any input to appear (React SPA — renders after JS)
+  try { await page.waitForSelector("input", { timeout: 15000 }); } catch { /* none found in main doc */ }
+
+  // Check main document inputs
   const inputs = await page.evaluate(() =>
     [...document.querySelectorAll("input")].map(el => ({
       type: el.type, name: el.name || "—",
@@ -145,7 +147,24 @@ async function loginToTopin(page, mobile, otp, loginUrl) {
       visible: el.offsetWidth > 0 && el.offsetHeight > 0,
     }))
   );
-  broadcast("info", `  Inputs found (${inputs.length}): ${JSON.stringify(inputs)}`);
+  broadcast("info", `  Main doc inputs (${inputs.length}): ${JSON.stringify(inputs)}`);
+
+  // Check for iframes — CCBP login might render inside one
+  const frames = page.frames();
+  broadcast("info", `  Frames found: ${frames.length} — ${frames.map(f => f.url()).join(" | ")}`);
+  for (const frame of frames) {
+    if (frame === page.mainFrame()) continue;
+    try {
+      const frameInputs = await frame.evaluate(() =>
+        [...document.querySelectorAll("input")].map(el => ({
+          type: el.type, name: el.name || "—",
+          placeholder: el.placeholder || "—", id: el.id || "—",
+        }))
+      );
+      if (frameInputs.length > 0)
+        broadcast("info", `  Inputs in frame (${frame.url().slice(0, 60)}): ${JSON.stringify(frameInputs)}`);
+    } catch { /* cross-origin frame */ }
+  }
 
   // Phone input — try multiple possible selectors
   const phoneSel = await trySelector(page, [
@@ -266,24 +285,36 @@ async function publishOneSession(page, session, assessments) {
   );
   if (!config?.url) throw new Error(`No config URL for ${session.skill} - L${session.level}`);
 
-  // ── 1. Open config URL — handle ?auth_code= redirect gracefully ──────────
+  // ── 1. Open config URL — wait for auth_code redirect to fully settle ────────
   broadcast("info", "  Opening config URL…");
-  try {
-    await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 });
-  } catch (e) {
-    if (!e.message.includes("interrupted")) throw e;
-    // Auth redirect interrupted the navigation — wait for it to settle
-    broadcast("info", "  Auth redirect detected, waiting to settle…");
+  await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+  // Give the page time to process any auth_code redirect and re-render
+  await page.waitForTimeout(4000);
+  // If page URL still has auth_code, wait for it to resolve
+  if (page.url().includes("auth_code")) {
+    broadcast("info", "  Waiting for auth redirect to settle…");
     await page.waitForTimeout(4000);
-    // Re-navigate to the target URL now that auth cookies are set
-    await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 });
   }
-  await page.waitForTimeout(2000);
 
-  // Wait for the clone button explicitly before clicking
-  await page.waitForSelector('button[aria-label="clone-assessment"]', { timeout: 20000 });
+  // Wait for clone button — retry once if first attempt fails (auth redirect timing)
+  let cloneFound = false;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await page.waitForSelector('button[aria-label="clone-assessment"]', { timeout: 15000 });
+      cloneFound = true;
+      break;
+    } catch {
+      if (attempt === 1) {
+        broadcast("info", "  Clone button not ready, re-navigating…");
+        await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+        await page.waitForTimeout(4000);
+      }
+    }
+  }
+  if (!cloneFound) throw new Error("Clone button not found after 2 attempts.");
+
   await page.click('button[aria-label="clone-assessment"]');
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(4000);
   broadcast("info", "  Cloned — on Section Details");
 
   // ── 2. Section Details: no changes, just Save & Next ─────────────────────
@@ -292,10 +323,27 @@ async function publishOneSession(page, session, assessments) {
   await page.waitForTimeout(3000);
   broadcast("info", "  On Final Review — filling details…");
 
+  // Debug: log all visible inputs on Final Review page
+  const reviewInputs = await page.evaluate(() =>
+    [...document.querySelectorAll('input:not([type="hidden"])')].map(el => ({
+      type: el.type, name: el.name || "—", placeholder: el.placeholder || "—", id: el.id || "—",
+    }))
+  );
+  broadcast("info", `  Final Review inputs: ${JSON.stringify(reviewInputs)}`);
+
   // ── 3. Final Review: Name of Assessment ───────────────────────────────────
-  const nameInput = page.locator('input[placeholder*="Name of Assessment" i], input[name*="title" i], input[name*="name" i]').first();
-  await nameInput.click({ clickCount: 3 });
-  await nameInput.fill(session.assessmentTitle);
+  const nameInputSel = await trySelector(page, [
+    'input[placeholder*="Name of Assessment" i]',
+    'input[placeholder*="assessment" i]',
+    'input[placeholder*="title" i]',
+    'input[name*="title" i]',
+    'input[name*="name" i]',
+    'input[id*="title" i]',
+    'input[id*="name" i]',
+  ], 15000);
+  if (!nameInputSel) throw new Error(`Name of Assessment input not found. Inputs on page: ${JSON.stringify(reviewInputs)}`);
+  await page.click(nameInputSel, { clickCount: 3 });
+  await page.fill(nameInputSel, session.assessmentTitle);
 
   // ── 4. Final Review: Tags — add Unique Exam ID ────────────────────────────
   await page.click('[placeholder="Add Tags"]');
