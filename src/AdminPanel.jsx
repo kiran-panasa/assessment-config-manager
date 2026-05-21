@@ -283,7 +283,6 @@ export default function AdminPanel({ S, showToast }) {
                                 disabled={isSelf}
                                 value={selected}
                                 onChange={e => setUserRoleMap(m => ({ ...m, [user.id]: e.target.value }))}>
-                                <option value="">— No Role —</option>
                                 {roleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                               </select>
                             </td>
