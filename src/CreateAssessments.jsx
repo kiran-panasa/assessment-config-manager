@@ -21,7 +21,6 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
   const [creds, setCreds] = useState({
     mobile: "", otp: "",
     apiEndpoint: "", apiToken: "",
-    uidField: "student_uid", assessIdField: "assessment_id",
     serverUrl: "http://localhost:3001",
     topinLoginUrl: "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp&WINDOW_MODE=IN_APP",
   });
@@ -163,11 +162,9 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          apiEndpoint:   creds.apiEndpoint,
-          apiToken:      creds.apiToken,
-          uidField:      creds.uidField      || "student_uid",
-          assessIdField: creds.assessIdField || "assessment_id",
-          date: selDate || null,
+          apiEndpoint: creds.apiEndpoint,
+          apiToken:    creds.apiToken,
+          date:        selDate || null,
         }),
       });
     } catch {
@@ -275,24 +272,9 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
                     value={creds.apiEndpoint} onChange={e => setCreds(p => ({ ...p, apiEndpoint: e.target.value }))} />
                 </div>
                 <div>
-                  <label style={S.label}>API Token</label>
-                  <input style={S.input} type="password" placeholder="Bearer token…"
+                  <label style={S.label}>API Key</label>
+                  <input style={S.input} type="password" placeholder="X-API-KEY value…"
                     value={creds.apiToken} onChange={e => setCreds(p => ({ ...p, apiToken: e.target.value }))} />
-                </div>
-              </div>
-              <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #e2e8f0" }}>
-                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, color: "#64748b", marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.06em" }}>Payload Field Names</div>
-                <div style={S.grid2}>
-                  <div>
-                    <label style={S.label}>Student UID field</label>
-                    <input style={S.input} placeholder="student_uid"
-                      value={creds.uidField} onChange={e => setCreds(p => ({ ...p, uidField: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label style={S.label}>Assessment ID field</label>
-                    <input style={S.input} placeholder="assessment_id"
-                      value={creds.assessIdField} onChange={e => setCreds(p => ({ ...p, assessIdField: e.target.value }))} />
-                  </div>
                 </div>
               </div>
             </div>

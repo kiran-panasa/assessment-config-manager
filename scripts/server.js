@@ -82,11 +82,11 @@ app.post("/publish", async (req, res) => {
 });
 
 app.post("/invite", async (req, res) => {
-  const { apiEndpoint, apiToken, uidField, assessIdField, date } = req.body;
+  const { apiEndpoint, apiToken, date } = req.body;
   if (!apiEndpoint || !apiToken) return res.status(400).json({ error: "apiEndpoint and apiToken are required" });
   res.json({ started: true });
   await new Promise(r => setTimeout(r, 400));
-  runInvite(apiEndpoint, apiToken, uidField || "student_uid", assessIdField || "assessment_id", date || null)
+  runInvite(apiEndpoint, apiToken, date || null)
     .catch(err => broadcast("error", `Fatal error: ${err.message}`));
 });
 
@@ -388,7 +388,7 @@ async function publishOneSession(page, session, assessments) {
   broadcast("info", "  Cloned — on Section Details");
 
   // ── 3. Section Details: Save & Next ──────────────────────────────────────
-  await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click();
+  await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click({ timeout: 30000 });
   await page.waitForURL(/edit-assessment/, { timeout: 30000 });
   await page.locator('input[placeholder="Enter Assessment Name"]').waitFor({ timeout: 30000 });
   broadcast("info", "  On Final Review — filling details…");
@@ -429,7 +429,7 @@ async function publishOneSession(page, session, assessments) {
   broadcast("info", "  Exit PIN set");
 
   // ── 9. Save & Next → Publish page ────────────────────────────────────────
-  await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click();
+  await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click({ timeout: 30000 });
   await page.waitForTimeout(3000);
   broadcast("info", "  On Publish & Invite page…");
 
@@ -573,36 +573,26 @@ async function fetchInviteData(date) {
   return { bookings, sessionMap };
 }
 
-// ── Invite: single API call with retry ───────────────────────────────────────
+// ── Invite: batch API call ────────────────────────────────────────────────────
 
-const MAX_RETRIES   = 3;
-const RATE_LIMIT_MS = 200;
+const INVITE_BATCH_SIZE = 20;
 
-async function callInviteAPI(endpoint, token, uidField, assessIdField, studentUid, assessmentId, attempt = 1) {
-  const payload = { [uidField]: studentUid, [assessIdField]: assessmentId };
-
+async function callInviteAPIBatch(endpoint, apiKey, studentUids, assessmentId) {
+  const payload = { candidate_user_ids: studentUids, assessment_id: assessmentId };
   const res = await fetch(endpoint, {
     method:  "POST",
-    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
     body:    JSON.stringify(payload),
   });
-
-  if (res.ok) return res.json().catch(() => ({}));
-
   const text = await res.text().catch(() => "");
-  if (attempt < MAX_RETRIES) {
-    const delay = 1000 * attempt;
-    broadcast("warn", `    Retry ${attempt}/${MAX_RETRIES - 1} in ${delay}ms…`);
-    await new Promise(r => setTimeout(r, delay));
-    return callInviteAPI(endpoint, token, uidField, assessIdField, studentUid, assessmentId, attempt + 1);
-  }
-
-  throw new Error(`HTTP ${res.status} — ${text.slice(0, 200)}`);
+  let json = {};
+  try { json = JSON.parse(text); } catch { /* non-JSON response */ }
+  return { ok: res.ok, status: res.status, json, text };
 }
 
 // ── Invite: main loop ─────────────────────────────────────────────────────────
 
-async function runInvite(apiEndpoint, apiToken, uidField, assessIdField, date) {
+async function runInvite(apiEndpoint, apiToken, date) {
   const startMs = Date.now();
   broadcast("info", "Fetching bookings from Firestore…");
   const { bookings, sessionMap } = await fetchInviteData(date);
@@ -624,36 +614,77 @@ async function runInvite(apiEndpoint, apiToken, uidField, assessIdField, date) {
     return;
   }
 
-  broadcast("info", `Sending ${toInvite.length} invite(s)…\n`);
+  // Group students by assessment_id (mirrors Apps Script logic)
+  const groups = new Map();
+  for (const booking of toInvite) {
+    const assessmentId = sessionMap.get(booking.sessionKey);
+    if (!groups.has(assessmentId)) groups.set(assessmentId, []);
+    groups.get(assessmentId).push(booking);
+  }
+
+  broadcast("info", `Sending ${toInvite.length} invite(s) across ${groups.size} assessment(s)…\n`);
 
   let sent = 0, failed = 0;
 
-  for (const booking of toInvite) {
-    const { firestoreId, studentName, studentUid, sessionKey } = booking;
-    const assessmentId = sessionMap.get(sessionKey);
-    const num = sent + failed + 1;
+  for (const [assessmentId, students] of groups) {
+    const totalBatches = Math.ceil(students.length / INVITE_BATCH_SIZE);
 
-    broadcast("info", `[${num}/${toInvite.length}] ${studentName || studentUid}`);
+    for (let i = 0; i < students.length; i += INVITE_BATCH_SIZE) {
+      const batch = students.slice(i, i + INVITE_BATCH_SIZE);
+      const batchNum = Math.floor(i / INVITE_BATCH_SIZE) + 1;
+      broadcast("info", `Batch ${batchNum}/${totalBatches} — ${batch.length} students`);
 
-    try {
-      await callInviteAPI(apiEndpoint, apiToken, uidField, assessIdField, studentUid, assessmentId);
-      await updateDoc(doc(db, "bookingRows", firestoreId), {
-        inviteStatus: "sent",
-        invitedAt:    new Date().toISOString(),
-        inviteError:  null,
-      });
-      broadcast("success", "  Sent");
-      sent++;
-    } catch (err) {
-      broadcast("error", `  Failed: ${err.message}`);
-      await updateDoc(doc(db, "bookingRows", firestoreId), {
-        inviteStatus: "failed",
-        inviteError:  err.message,
-      }).catch(() => {});
-      failed++;
+      try {
+        const { ok, status, json } = await callInviteAPIBatch(
+          apiEndpoint, apiToken,
+          batch.map(b => b.studentUid),
+          assessmentId,
+        );
+
+        if (ok) {
+          const failedUids = new Set(
+            (json.failed_users_details || []).map(f => String(f.user_id || "").trim()),
+          );
+
+          for (const booking of batch) {
+            if (failedUids.has(booking.studentUid)) {
+              const reason = (json.failed_users_details || [])
+                .find(f => String(f.user_id) === booking.studentUid)?.reason || "Failed";
+              broadcast("error", `  ${booking.studentName || booking.studentUid}: ${reason}`);
+              await updateDoc(doc(db, "bookingRows", booking.firestoreId), {
+                inviteStatus: "failed", inviteError: reason,
+              }).catch(() => {});
+              failed++;
+            } else {
+              await updateDoc(doc(db, "bookingRows", booking.firestoreId), {
+                inviteStatus: "sent", invitedAt: new Date().toISOString(), inviteError: null,
+              });
+              sent++;
+            }
+          }
+          broadcast("success", `  ${batch.length - failedUids.size} sent, ${failedUids.size} failed`);
+        } else {
+          const errorMsg = json.res_status || `HTTP ${status}`;
+          broadcast("error", `  Batch failed: ${errorMsg}`);
+          for (const booking of batch) {
+            await updateDoc(doc(db, "bookingRows", booking.firestoreId), {
+              inviteStatus: "failed", inviteError: errorMsg,
+            }).catch(() => {});
+            failed++;
+          }
+        }
+      } catch (err) {
+        broadcast("error", `  Batch error: ${err.message}`);
+        for (const booking of batch) {
+          await updateDoc(doc(db, "bookingRows", booking.firestoreId), {
+            inviteStatus: "failed", inviteError: err.message,
+          }).catch(() => {});
+          failed++;
+        }
+      }
+
+      await new Promise(r => setTimeout(r, 2000)); // 2s between batches
     }
-
-    await new Promise(r => setTimeout(r, RATE_LIMIT_MS));
   }
 
   await logJob("invite", startMs, { sent, failed });
