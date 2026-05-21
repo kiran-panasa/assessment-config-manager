@@ -46,7 +46,7 @@ const clients = new Set();
 // Keep SSE connections alive — cloud proxies drop silent connections after ~30s
 setInterval(() => {
   for (const res of clients) res.write(": heartbeat\n\n");
-}, 20000);
+}, 15000);
 
 function broadcast(type, message, extra = {}) {
   const data = JSON.stringify({ type, message, ts: Date.now(), ...extra });
@@ -363,8 +363,11 @@ async function publishOneSession(page, session, assessments) {
   }
 
   // ── 4. Final Review: Tags — add Unique Exam ID ────────────────────────────
-  await page.click('[placeholder="Add Tags"]');
-  await page.keyboard.type(session.uniqueExamId);
+  // Tags field is a react-select component — target its hidden input by id pattern
+  const tagsInput = page.locator('input[id*="react-select"]').first();
+  await tagsInput.waitFor({ timeout: 10000 });
+  await tagsInput.click();
+  await tagsInput.type(session.uniqueExamId);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
 
