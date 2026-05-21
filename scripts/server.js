@@ -300,13 +300,15 @@ async function publishOneSession(page, session, assessments) {
   } catch {
     broadcast("info", `  Auth redirect incomplete — still on ${page.url()}`);
   }
-  await page.waitForTimeout(3000); // React SPA: give bundle time to render
+  // Wait for page load state so auth_code API processing completes before render
+  await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(6000); // React SPA: give bundle time to render
 
   // Wait for clone button — retry once with a fresh navigation if not found
   let cloneFound = false;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      await page.waitForSelector('button[aria-label="clone-assessment"]', { timeout: 20000 });
+      await page.waitForSelector('button[aria-label="clone-assessment"]', { timeout: 30000 });
       cloneFound = true;
       break;
     } catch {
@@ -316,7 +318,8 @@ async function publishOneSession(page, session, assessments) {
         try {
           await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 });
         } catch { /* proceed anyway */ }
-        await page.waitForTimeout(3000);
+        await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
+        await page.waitForTimeout(6000);
       }
     }
   }
