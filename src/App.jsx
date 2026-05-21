@@ -960,7 +960,8 @@ function AppInner() {
 
   useEffect(() => {
     if (authLoading || !allowedPages.length) return;
-    const adminOk = page === "admin" && userProfile?.role === "admin";
+    const isAdminRole = userProfile?.role === "admin" || userProfile?.role === "super-admin";
+    const adminOk = page === "admin" && isAdminRole;
     if (!adminOk && !allowedPages.includes(page)) setPage(allowedPages[0]);
   }, [allowedPages, authLoading]);
 
@@ -1108,7 +1109,7 @@ function AppInner() {
     { key: "bookings",    label: "Student Bookings",          Icon: IconBookings },
     { key: "create",      label: "Create Assessments",        Icon: IconCreate },
     { key: "invited",     label: "Invited Students",          Icon: IconInvited },
-    ...(userProfile?.role === "admin" ? [{ key: "admin", label: "Admin Panel", Icon: IconAdmin }] : []),
+    ...((userProfile?.role === "admin" || userProfile?.role === "super-admin") ? [{ key: "admin", label: "Admin Panel", Icon: IconAdmin }] : []),
   ];
 
   if (authLoading) return (
