@@ -22,6 +22,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     mobile: "", otp: "",
     apiEndpoint: "", apiToken: "",
     serverUrl: "http://localhost:3001",
+    serverSecret: "",
     topinLoginUrl: "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp&WINDOW_MODE=IN_APP",
   });
   const [credsSaved, setCredsSaved] = useState(false);
@@ -145,7 +146,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     try {
       const res = await fetch(`${creds.serverUrl}/publish`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(creds.serverSecret ? { "x-server-token": creds.serverSecret } : {}) },
         body: JSON.stringify({ mobile: creds.mobile, otp: creds.otp, date: selDate || null, topinLoginUrl: creds.topinLoginUrl || null }),
       });
       if (!res.ok) {
@@ -170,7 +171,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     try {
       const res = await fetch(`${creds.serverUrl}/invite`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(creds.serverSecret ? { "x-server-token": creds.serverSecret } : {}) },
         body: JSON.stringify({ apiEndpoint: creds.apiEndpoint, apiToken: creds.apiToken, date: selDate || null }),
       });
       if (!res.ok) {
@@ -239,12 +240,23 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
               <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>Automation Server</div>
               <label style={S.label}>Server URL</label>
               <input style={S.input} type="url"
-                placeholder="http://localhost:3001  or  https://your-app.railway.app"
+                placeholder="http://localhost:3001  or  https://your-app.onrender.com"
                 value={creds.serverUrl}
                 onChange={e => setCreds(p => ({ ...p, serverUrl: e.target.value.trim() }))} />
               <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
                 Local: <code style={{ color: "#3b82f6" }}>http://localhost:3001</code> &nbsp;·&nbsp;
-                Railway: paste your Railway service URL here — shared across all devices automatically.
+                Render: paste your Render service URL here — shared across all devices automatically.
+              </div>
+              <div style={{ marginTop: 18 }}>
+                <label style={S.label}>Server Secret</label>
+                <input style={S.input} type="password"
+                  placeholder="Must match SERVER_SECRET on Render (leave blank for local dev)"
+                  value={creds.serverSecret}
+                  onChange={e => setCreds(p => ({ ...p, serverSecret: e.target.value }))} />
+                <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
+                  Set <code style={{ color: "#3b82f6" }}>SERVER_SECRET</code> in Render → Environment, then paste the same value here.
+                  Requests without a matching token will be rejected with 401.
+                </div>
               </div>
             </div>
 

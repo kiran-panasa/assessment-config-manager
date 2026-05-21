@@ -57,6 +57,16 @@ function broadcast(type, message, extra = {}) {
   console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
+// ── Auth middleware ───────────────────────────────────────────────────────────
+
+function requireSecret(req, res, next) {
+  const secret = process.env.SERVER_SECRET;
+  if (!secret) return next(); // no secret set → open (local dev)
+  if (req.headers["x-server-token"] !== secret)
+    return res.status(401).json({ error: "Unauthorized" });
+  next();
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
@@ -74,7 +84,7 @@ app.get("/progress", (req, res) => {
 const DEFAULT_TOPIN_LOGIN_URL =
   "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp&WINDOW_MODE=IN_APP";
 
-app.post("/publish", async (req, res) => {
+app.post("/publish", requireSecret, async (req, res) => {
   if (jobRunning) return res.status(409).json({ error: "A job is already running. Wait for it to finish before starting another." });
   const { mobile, otp, date, topinLoginUrl } = req.body;
   if (!mobile || !otp) return res.status(400).json({ error: "mobile and otp are required" });
@@ -87,7 +97,7 @@ app.post("/publish", async (req, res) => {
     .finally(() => { jobRunning = false; });
 });
 
-app.post("/invite", async (req, res) => {
+app.post("/invite", requireSecret, async (req, res) => {
   if (jobRunning) return res.status(409).json({ error: "A job is already running. Wait for it to finish before starting another." });
   const { apiEndpoint, apiToken, date } = req.body;
   if (!apiEndpoint || !apiToken) return res.status(400).json({ error: "apiEndpoint and apiToken are required" });
