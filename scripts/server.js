@@ -479,7 +479,7 @@ async function publishOneSession(page, session, assessments) {
     assessmentId = m ? m[1] : null;
   }
   if (!assessmentId) throw new Error(`Could not extract org_id from link: ${assessmentLink}`);
-  return assessmentId;
+  return { assessmentId, assessmentLink };
 }
 
 // ── Job logger (writes duration to Firestore for credit tracking) ─────────────
@@ -526,9 +526,10 @@ async function runPublish(mobile, otp, date, loginUrl) {
       broadcast("info", `\n[${num}/${sessions.length}] ${session.assessmentTitle} — ${session.dateOfAssessment} ${session.startTimeSlot}`);
 
       try {
-        const assessmentId = await publishOneSession(page, session, assessments);
+        const { assessmentId, assessmentLink } = await publishOneSession(page, session, assessments);
         await updateDoc(doc(db, "examSessions", session.id), {
           topinAssessmentId: assessmentId,
+          assessmentLink,
           publishStatus:     "published",
           publishedAt:       new Date().toISOString(),
         });
