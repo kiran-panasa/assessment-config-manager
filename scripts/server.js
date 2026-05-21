@@ -18,6 +18,7 @@ import cors from "cors";
 import { chromium } from "playwright";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, getDocs, doc, updateDoc, addDoc } from "firebase/firestore";
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
 
@@ -30,8 +31,9 @@ const FIREBASE_CONFIG = {
   appId:             "1:567558097768:web:aad46b095e48359fdf24dd",
 };
 
-const fbApp = initializeApp(FIREBASE_CONFIG, "automation-server");
-const db    = getFirestore(fbApp);
+const fbApp  = initializeApp(FIREBASE_CONFIG, "automation-server");
+const db     = getFirestore(fbApp);
+const fbAuth = getAuth(fbApp);
 
 // ── Express setup ─────────────────────────────────────────────────────────────
 
@@ -701,11 +703,28 @@ async function runInvite(apiEndpoint, apiToken, date) {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
+async function authenticateServer() {
+  const email    = process.env.SERVER_FB_EMAIL;
+  const password = process.env.SERVER_FB_PASSWORD;
+  if (!email || !password) {
+    console.warn("[WARN] SERVER_FB_EMAIL / SERVER_FB_PASSWORD not set.");
+    console.warn("       Firestore calls will fail once security rules are deployed.");
+    console.warn("       See firestore.rules for setup instructions.");
+    return;
+  }
+  await signInWithEmailAndPassword(fbAuth, email, password);
+  console.log(`[AUTH] Signed in to Firebase as: ${email}`);
+}
+
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`\n🚀 Automation server running at http://localhost:${PORT}`);
-  console.log(`   GET  /health    — status check`);
-  console.log(`   GET  /progress  — SSE progress stream`);
-  console.log(`   POST /publish   — run Playwright publish`);
-  console.log(`   POST /invite    — run API invites\n`);
-});
+(async () => {
+  await authenticateServer();
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Automation server running at http://localhost:${PORT}`);
+    console.log(`   GET  /health    — status check`);
+    console.log(`   GET  /status    — job running state`);
+    console.log(`   GET  /progress  — SSE progress stream`);
+    console.log(`   POST /publish   — run Playwright publish`);
+    console.log(`   POST /invite    — run API invites\n`);
+  });
+})();

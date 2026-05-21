@@ -1,0 +1,88 @@
+rules_version = '2';
+
+// ── Deployment ────────────────────────────────────────────────────────────────
+// Firebase Console → Firestore → Rules → paste and Publish
+// OR: firebase deploy --only firestore:rules  (requires firebase-tools)
+//
+// ── Server setup (one-time, before deploying these rules) ────────────────────
+// 1. Firebase Console → Authentication → Add user
+//    email: server@nxtwave.tech  (or any internal address)
+//    password: <generate a strong password>
+// 2. Firebase Console → Firestore → users collection → Add document
+//    Document ID: <UID from step 1>
+//    Fields: { email: "server@nxtwave.tech", displayName: "Automation Server",
+//              role: "admin", status: "active" }
+// 3. Render → Environment → Add vars:
+//    SERVER_FB_EMAIL=server@nxtwave.tech
+//    SERVER_FB_PASSWORD=<password from step 1>
+// ─────────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isAuth()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc().data.role == 'admin'
+        && userDoc().data.status == 'active';
+    }
+
+    function isActive() {
+      return isAuth()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc().data.status == 'active';
+    }
+
+    // ── Users ─────────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Any auth user can read their own profile (needed for pending screen)
+      allow read: if isAuth() && request.auth.uid == userId;
+      // Admins can read all profiles
+      allow read: if isAdmin();
+      // Signup: new users may only create their own doc with pending status
+      allow create: if isAuth()
+        && request.auth.uid == userId
+        && request.resource.data.status == 'pending'
+        && request.resource.data.role == null;
+      // Only admins can approve, change roles, or revoke
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Roles ─────────────────────────────────────────────────────────────────
+    match /roles/{roleId} {
+      // All authenticated users read roles (AuthContext needs page access list)
+      allow read: if isAuth();
+      // Only admins create/update/delete roles
+      allow write: if isAdmin();
+    }
+
+    // ── Data collections (assessments, bookings, sessions) ────────────────────
+    match /assessments/{id}  { allow read, write: if isActive(); }
+    match /bookingRows/{id}  { allow read, write: if isActive(); }
+    match /examSessions/{id} { allow read, write: if isActive(); }
+    match /config/{id}       { allow read, write: if isActive(); }
+    match /jobLogs/{id}      { allow read, write: if isActive(); }
+
+    // ── Automation settings (server URL, OTP, API keys) ───────────────────────
+    match /settings/{id} {
+      // Active users read (Create Assessments page loads server URL + credentials)
+      allow read: if isActive();
+      // Only admins write (sensitive credentials)
+      allow write: if isAdmin();
+    }
+
+    // ── Activity logs ─────────────────────────────────────────────────────────
+    match /logs/{id} {
+      allow create: if isActive();
+      allow read:   if isAdmin();
+    }
+  }
+}
