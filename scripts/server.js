@@ -43,6 +43,11 @@ app.use(express.json());
 
 const clients = new Set();
 
+// Keep SSE connections alive — cloud proxies drop silent connections after ~30s
+setInterval(() => {
+  for (const res of clients) res.write(": heartbeat\n\n");
+}, 20000);
+
 function broadcast(type, message, extra = {}) {
   const data = JSON.stringify({ type, message, ts: Date.now(), ...extra });
   for (const res of clients) res.write(`data: ${data}\n\n`);
