@@ -288,26 +288,30 @@ async function publishOneSession(page, session, assessments) {
   // ── 1. Open config URL — wait for auth_code redirect to fully settle ────────
   broadcast("info", "  Opening config URL…");
   await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-  // Give the page time to process any auth_code redirect and re-render
-  await page.waitForTimeout(4000);
-  // If page URL still has auth_code, wait for it to resolve
-  if (page.url().includes("auth_code")) {
-    broadcast("info", "  Waiting for auth redirect to settle…");
-    await page.waitForTimeout(4000);
-  }
 
-  // Wait for clone button — retry once if first attempt fails (auth redirect timing)
+  // Block until the full redirect chain settles on config.topin.tech
+  try {
+    await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 });
+  } catch {
+    broadcast("info", `  Auth redirect incomplete — still on ${page.url()}`);
+  }
+  await page.waitForTimeout(3000); // React SPA: give bundle time to render
+
+  // Wait for clone button — retry once with a fresh navigation if not found
   let cloneFound = false;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      await page.waitForSelector('button[aria-label="clone-assessment"]', { timeout: 15000 });
+      await page.waitForSelector('button[aria-label="clone-assessment"]', { timeout: 20000 });
       cloneFound = true;
       break;
     } catch {
       if (attempt === 1) {
         broadcast("info", "  Clone button not ready, re-navigating…");
         await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-        await page.waitForTimeout(4000);
+        try {
+          await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 });
+        } catch { /* proceed anyway */ }
+        await page.waitForTimeout(3000);
       }
     }
   }
@@ -340,10 +344,18 @@ async function publishOneSession(page, session, assessments) {
     'input[name*="name" i]',
     'input[id*="title" i]',
     'input[id*="name" i]',
-  ], 15000);
-  if (!nameInputSel) throw new Error(`Name of Assessment input not found. Inputs on page: ${JSON.stringify(reviewInputs)}`);
-  await page.click(nameInputSel, { clickCount: 3 });
-  await page.fill(nameInputSel, session.assessmentTitle);
+  ], 5000);
+
+  if (nameInputSel) {
+    await page.click(nameInputSel, { clickCount: 3 });
+    await page.fill(nameInputSel, session.assessmentTitle);
+  } else {
+    // Field may be a contenteditable div (rich-text editor), not a plain <input>
+    const editable = page.locator('[contenteditable="true"]').first();
+    await editable.waitFor({ timeout: 10000 });
+    await editable.click({ clickCount: 3 });
+    await editable.fill(session.assessmentTitle);
+  }
 
   // ── 4. Final Review: Tags — add Unique Exam ID ────────────────────────────
   await page.click('[placeholder="Add Tags"]');
