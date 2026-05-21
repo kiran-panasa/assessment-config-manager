@@ -118,6 +118,16 @@ export default function AdminPanel({ S, showToast }) {
     setSavingKey(user.id, false);
   };
 
+  const handleRevoke = async (user) => {
+    if (!window.confirm(`Revoke access for ${user.email}? They will be moved back to Pending.`)) return;
+    setSavingKey(user.id + "_revoke", true);
+    try {
+      await updateDoc(doc(db, "users", user.id), { status: "pending", role: null });
+      showToast(`Access revoked for ${user.email}.`);
+    } catch { showToast("Failed to revoke access.", "error"); }
+    setSavingKey(user.id + "_revoke", false);
+  };
+
   const handleTogglePage = async (roleId, pageKey, currentPages) => {
     const newPages = currentPages.includes(pageKey)
       ? currentPages.filter(p => p !== pageKey)
@@ -245,6 +255,7 @@ export default function AdminPanel({ S, showToast }) {
                         <th style={S.th}>Current Role</th>
                         <th style={S.th}>Change Role</th>
                         <th style={S.th}></th>
+                        <th style={S.th}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -282,6 +293,14 @@ export default function AdminPanel({ S, showToast }) {
                                 onClick={() => handleRoleChange(user)}
                                 style={{ ...S.btn("primary"), padding: "7px 18px", fontSize: 12, opacity: (!hasChange || isSelf || saving[user.id]) ? 0.35 : 1 }}>
                                 {saving[user.id] ? "…" : "Save"}
+                              </button>
+                            </td>
+                            <td style={S.td}>
+                              <button
+                                disabled={isSelf || saving[user.id + "_revoke"]}
+                                onClick={() => handleRevoke(user)}
+                                style={{ ...S.btn("danger"), padding: "7px 18px", fontSize: 12, opacity: (isSelf || saving[user.id + "_revoke"]) ? 0.35 : 1 }}>
+                                {saving[user.id + "_revoke"] ? "…" : "Revoke"}
                               </button>
                             </td>
                           </tr>
