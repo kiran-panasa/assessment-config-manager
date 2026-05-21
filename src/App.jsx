@@ -99,6 +99,15 @@ function buildExamId(skill, level, date, timeSlot) {
   return `NG26_NIAT_GRIT_${skill.toUpperCase().replace(/\s+/g, "_")}_L${level}_${toISODate(date)}_${minsToHHMM(timeToMins(timeSlot))}`;
 }
 
+function parseSessionSkillLevel(title) {
+  if (!title) return { skill: "", level: "" };
+  const m = title.match(/^(.*?)\s*-\s*(L\d+)$/i);
+  return m ? { skill: m[1].trim(), level: m[2].toUpperCase() } : { skill: title.trim(), level: "" };
+}
+
+const T1_FILTER_INIT = { contestDate: "All", skill: "All", skillLevel: "All", timeSlot: "All", campus: "All", batch: "All", inviteStatus: "All" };
+const T2_FILTER_INIT = { dateOfAssessment: "All", skill: "All", level: "All", startTimeSlot: "All", publishStatus: "All" };
+
 function parseBookingCSV(text, existingBids, existingSessions, assessments, bufMins) {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split("\n");
   if (lines.length < 2) return { error: "CSV file is empty." };
@@ -273,9 +282,14 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
   const [processing, setProcessing] = useState(false);
   const fileRef = useRef(null);
 
-  const [t1Date, setT1Date] = useState("All"); const [t1Page, setT1Page] = useState(1);
-  const [t2Date, setT2Date] = useState("All"); const [t2Page, setT2Page] = useState(1);
-  const [t3Date, setT3Date] = useState("All"); const [t3Page, setT3Page] = useState(1);
+  const [t1Filters, setT1Filters] = useState(T1_FILTER_INIT);
+  const [t2Filters, setT2Filters] = useState(T2_FILTER_INIT);
+  const [t3Date, setT3Date] = useState("All");
+  const [t1Page, setT1Page] = useState(1);
+  const [t2Page, setT2Page] = useState(1);
+  const [t3Page, setT3Page] = useState(1);
+  const [deleteModal, setDeleteModal] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const existingBids = useMemo(() => bookingRows.map(r => r.bookingId), [bookingRows]);
   const existingDocIdMap = useMemo(() => { const m = new Map(); bookingRows.forEach(r => m.set(r.bookingId, r.id)); return m; }, [bookingRows]);
@@ -288,13 +302,66 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
       return { ...row, uniqueExamId: s?.uniqueExamId ?? "—", mapped: !!s };
     }), [bookingRows, sessionMap]);
 
-  const t1Dates = useMemo(() => [...new Set(bookingRows.map(r => r.contestDate))].filter(Boolean).sort(), [bookingRows]);
-  const t2Dates = useMemo(() => [...new Set(examSessions.map(r => r.dateOfAssessment))].filter(Boolean).sort(), [examSessions]);
-  const t3Dates = useMemo(() => [...new Set(userMapping.map(r => r.contestDate))].filter(Boolean).sort(), [userMapping]);
+  const t1Opts = useMemo(() => ({
+    contestDate: [...new Set(bookingRows.map(r => r.contestDate))].filter(Boolean).sort(),
+    skill:       [...new Set(bookingRows.map(r => r.skill))].filter(Boolean).sort(),
+    skillLevel:  [...new Set(bookingRows.map(r => r.skillLevel))].filter(Boolean).sort(),
+    timeSlot:    [...new Set(bookingRows.map(r => r.timeSlot))].filter(Boolean).sort(),
+    campus:      [...new Set(bookingRows.map(r => r.campus))].filter(Boolean).sort(),
+    batch:       [...new Set(bookingRows.map(r => r.batch))].filter(Boolean).sort(),
+  }), [bookingRows]);
 
-  const t1Filtered = t1Date === "All" ? bookingRows : bookingRows.filter(r => r.contestDate === t1Date);
-  const t2Filtered = t2Date === "All" ? examSessions : examSessions.filter(r => r.dateOfAssessment === t2Date);
+  const t2Opts = useMemo(() => {
+    const skills = new Set(), levels = new Set(), times = new Set(), dates = new Set();
+    examSessions.forEach(s => {
+      const { skill, level } = parseSessionSkillLevel(s.assessmentTitle);
+      if (skill) skills.add(skill);
+      if (level) levels.add(level);
+      if (s.startTimeSlot) times.add(s.startTimeSlot);
+      if (s.dateOfAssessment) dates.add(s.dateOfAssessment);
+    });
+    return {
+      dateOfAssessment: [...dates].sort(),
+      skill: [...skills].sort(),
+      level: [...levels].sort(),
+      startTimeSlot: [...times].sort(),
+    };
+  }, [examSessions]);
+
+  const t1Filtered = useMemo(() => bookingRows.filter(r => {
+    const f = t1Filters;
+    if (f.contestDate !== "All" && r.contestDate !== f.contestDate) return false;
+    if (f.skill       !== "All" && r.skill       !== f.skill)       return false;
+    if (f.skillLevel  !== "All" && r.skillLevel  !== f.skillLevel)  return false;
+    if (f.timeSlot    !== "All" && r.timeSlot    !== f.timeSlot)    return false;
+    if (f.campus      !== "All" && r.campus      !== f.campus)      return false;
+    if (f.batch       !== "All" && r.batch       !== f.batch)       return false;
+    if (f.inviteStatus !== "All") {
+      const st = r.inviteStatus || "not_sent";
+      if (st !== f.inviteStatus) return false;
+    }
+    return true;
+  }), [bookingRows, t1Filters]);
+
+  const t2Filtered = useMemo(() => examSessions.filter(s => {
+    const f = t2Filters;
+    const { skill, level } = parseSessionSkillLevel(s.assessmentTitle);
+    if (f.dateOfAssessment !== "All" && s.dateOfAssessment !== f.dateOfAssessment) return false;
+    if (f.skill            !== "All" && skill              !== f.skill)            return false;
+    if (f.level            !== "All" && level              !== f.level)            return false;
+    if (f.startTimeSlot    !== "All" && s.startTimeSlot    !== f.startTimeSlot)    return false;
+    if (f.publishStatus !== "All") {
+      const st = s.publishStatus || "pending";
+      if (st !== f.publishStatus) return false;
+    }
+    return true;
+  }), [examSessions, t2Filters]);
+
+  const t3Dates = useMemo(() => [...new Set(userMapping.map(r => r.contestDate))].filter(Boolean).sort(), [userMapping]);
   const t3Filtered = t3Date === "All" ? userMapping : userMapping.filter(r => r.contestDate === t3Date);
+
+  const t1AnyActive = Object.values(t1Filters).some(v => v !== "All");
+  const t2AnyActive = Object.values(t2Filters).some(v => v !== "All");
 
   const rowsToSave = useMemo(() =>
     csvData ? (dupChoice === "overwrite" ? csvData.rows : csvData.newRows) : [],
@@ -354,6 +421,35 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
   const handleDeleteSession = async (id) => {
     try { await deleteDoc(doc(db, "examSessions", id)); writeLog("session_deleted", { id }); showToast("Session deleted."); }
     catch { showToast("Failed to delete.", "error"); }
+  };
+
+  const openDeleteModal = (table) => {
+    if (table === "bookings") {
+      const toDelete = t1Filtered.filter(r => r.inviteStatus !== "sent");
+      const blocked  = t1Filtered.filter(r => r.inviteStatus === "sent").length;
+      setDeleteModal({ table: "bookings", tableName: "Slot Bookings", toDelete, blocked });
+    } else {
+      const toDelete = t2Filtered.filter(s => s.publishStatus !== "published");
+      const blocked  = t2Filtered.filter(s => s.publishStatus === "published").length;
+      setDeleteModal({ table: "sessions", tableName: "Unique Assessments", toDelete, blocked });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!deleteModal || deleting) return;
+    setDeleting(true);
+    try {
+      const collName = deleteModal.table === "bookings" ? "bookingRows" : "examSessions";
+      for (const record of deleteModal.toDelete) {
+        await deleteDoc(doc(db, collName, record.id));
+      }
+      writeLog("bulk_delete", { table: collName, count: deleteModal.toDelete.length });
+      showToast(`Deleted ${deleteModal.toDelete.length} records.`);
+      setDeleteModal(null);
+      if (deleteModal.table === "bookings") { setT1Filters(T1_FILTER_INIT); setT1Page(1); }
+      else { setT2Filters(T2_FILTER_INIT); setT2Page(1); }
+    } catch { showToast("Delete failed. Please try again.", "error"); }
+    setDeleting(false);
   };
 
   return (
@@ -462,18 +558,53 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
         {/* ── TABLE 1: SLOT BOOKINGS ── */}
         {bookTab === "bookings" && (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-              <div>
-                <div style={S.sectionTitle}>Slot Bookings</div>
-                <div style={{ ...S.sectionSub, marginBottom: 0 }}>All raw booking rows from uploaded CSVs.</div>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <div style={S.sectionTitle}>Slot Bookings</div>
+                  <div style={{ ...S.sectionSub, marginBottom: 0 }}>All raw booking rows from uploaded CSVs.</div>
+                </div>
               </div>
-              <DateFilter dates={t1Dates} value={t1Date} onChange={v => { setT1Date(v); setT1Page(1); }} S={S} />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+                {[
+                  { key: "contestDate", label: "Date",      opts: t1Opts.contestDate },
+                  { key: "skill",       label: "Skill",     opts: t1Opts.skill },
+                  { key: "skillLevel",  label: "Level",     opts: t1Opts.skillLevel },
+                  { key: "timeSlot",    label: "Time Slot", opts: t1Opts.timeSlot },
+                  { key: "campus",      label: "Campus",    opts: t1Opts.campus },
+                  { key: "batch",       label: "Batch",     opts: t1Opts.batch },
+                  { key: "inviteStatus", label: "Invite", opts: ["sent","failed","not_sent"], display: { sent: "Sent", failed: "Failed", not_sent: "Not Sent" } },
+                ].map(({ key, label, opts, display }) => (
+                  <div key={key}>
+                    <div style={{ ...S.label, marginBottom: 4 }}>{label}</div>
+                    <select
+                      style={{ ...S.select, width: "auto", minWidth: 110, padding: "7px 10px", fontSize: 12 }}
+                      value={t1Filters[key]}
+                      onChange={e => { setT1Filters(f => ({ ...f, [key]: e.target.value })); setT1Page(1); }}>
+                      <option value="All">All</option>
+                      {opts.map(v => <option key={v} value={v}>{display ? display[v] : v}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginLeft: "auto" }}>
+                  {t1AnyActive && (
+                    <button onClick={() => { setT1Filters(T1_FILTER_INIT); setT1Page(1); }}
+                      style={{ ...S.btn("secondary"), padding: "7px 14px", fontSize: 12 }}>Reset</button>
+                  )}
+                  <button
+                    disabled={!t1AnyActive}
+                    onClick={() => openDeleteModal("bookings")}
+                    style={{ ...S.btn("danger"), padding: "7px 16px", fontSize: 12, opacity: !t1AnyActive ? 0.35 : 1 }}>
+                    Delete {t1AnyActive ? `${t1Filtered.filter(r => r.inviteStatus !== "sent").length} records` : "…"}
+                  </button>
+                </div>
+              </div>
             </div>
             <div style={S.card}>
               {t1Filtered.length === 0 ? (
                 <div style={{ textAlign: "center", color: "#555a7a", padding: "60px 0", fontSize: 13 }}>
                   <div style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8" }}>
-                    {bookingRows.length === 0 ? "No bookings yet" : "No results for selected date"}
+                    {bookingRows.length === 0 ? "No bookings yet" : "No results for selected filters"}
                   </div>
                   {bookingRows.length === 0 && "Upload a CSV to populate this table."}
                 </div>
@@ -516,18 +647,51 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
         {/* ── TABLE 2: UNIQUE ASSESSMENTS ── */}
         {bookTab === "assessments" && (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-              <div>
-                <div style={S.sectionTitle}>Unique Assessments</div>
-                <div style={{ ...S.sectionSub, marginBottom: 0 }}>One row per unique exam slot with UniqueExamID and EXIT PIN.</div>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <div style={S.sectionTitle}>Unique Assessments</div>
+                  <div style={{ ...S.sectionSub, marginBottom: 0 }}>One row per unique exam slot with UniqueExamID and EXIT PIN.</div>
+                </div>
               </div>
-              <DateFilter dates={t2Dates} value={t2Date} onChange={v => { setT2Date(v); setT2Page(1); }} S={S} />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+                {[
+                  { key: "dateOfAssessment", label: "Date",      opts: t2Opts.dateOfAssessment },
+                  { key: "skill",            label: "Skill",     opts: t2Opts.skill },
+                  { key: "level",            label: "Level",     opts: t2Opts.level },
+                  { key: "startTimeSlot",    label: "Time Slot", opts: t2Opts.startTimeSlot },
+                  { key: "publishStatus", label: "Status", opts: ["pending","published","failed"], display: { pending: "Pending", published: "Published", failed: "Failed" } },
+                ].map(({ key, label, opts, display }) => (
+                  <div key={key}>
+                    <div style={{ ...S.label, marginBottom: 4 }}>{label}</div>
+                    <select
+                      style={{ ...S.select, width: "auto", minWidth: 110, padding: "7px 10px", fontSize: 12 }}
+                      value={t2Filters[key]}
+                      onChange={e => { setT2Filters(f => ({ ...f, [key]: e.target.value })); setT2Page(1); }}>
+                      <option value="All">All</option>
+                      {opts.map(v => <option key={v} value={v}>{display ? display[v] : v}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginLeft: "auto" }}>
+                  {t2AnyActive && (
+                    <button onClick={() => { setT2Filters(T2_FILTER_INIT); setT2Page(1); }}
+                      style={{ ...S.btn("secondary"), padding: "7px 14px", fontSize: 12 }}>Reset</button>
+                  )}
+                  <button
+                    disabled={!t2AnyActive}
+                    onClick={() => openDeleteModal("sessions")}
+                    style={{ ...S.btn("danger"), padding: "7px 16px", fontSize: 12, opacity: !t2AnyActive ? 0.35 : 1 }}>
+                    Delete {t2AnyActive ? `${t2Filtered.filter(s => s.publishStatus !== "published").length} records` : "…"}
+                  </button>
+                </div>
+              </div>
             </div>
             <div style={S.card}>
               {t2Filtered.length === 0 ? (
                 <div style={{ textAlign: "center", color: "#555a7a", padding: "60px 0", fontSize: 13 }}>
                   <div style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8" }}>
-                    {examSessions.length === 0 ? "No sessions yet" : "No results for selected date"}
+                    {examSessions.length === 0 ? "No sessions yet" : "No results for selected filters"}
                   </div>
                 </div>
               ) : (
@@ -633,6 +797,40 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
           </>
         )}
       </div>
+
+      {deleteModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
+          <div style={{ background: "#fff", borderRadius: 12, padding: "32px 36px", maxWidth: 460, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 18, color: "#0f172a", marginBottom: 4 }}>
+              Delete {deleteModal.tableName}
+            </div>
+            <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 24 }}>This action cannot be undone.</div>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px", marginBottom: 24 }}>
+              {deleteModal.toDelete.length > 0
+                ? <div style={{ fontSize: 13, color: "#059669", fontFamily: "'Inter', sans-serif", fontWeight: 600, marginBottom: deleteModal.blocked > 0 ? 6 : 0 }}>
+                    ✓ {deleteModal.toDelete.length} record{deleteModal.toDelete.length !== 1 ? "s" : ""} will be deleted
+                  </div>
+                : <div style={{ fontSize: 13, color: "#94a3b8" }}>No deletable records match the current filters.</div>
+              }
+              {deleteModal.blocked > 0 && (
+                <div style={{ fontSize: 13, color: "#ef4444", fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>
+                  ✗ {deleteModal.blocked} blocked — {deleteModal.table === "bookings" ? "invite already sent" : "already published on Topin"}
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+              <button onClick={() => setDeleteModal(null)}
+                style={{ ...S.btn("secondary"), padding: "10px 20px" }}>Cancel</button>
+              <button
+                disabled={deleting || deleteModal.toDelete.length === 0}
+                onClick={handleBulkDelete}
+                style={{ ...S.btn("danger"), padding: "10px 20px", background: "#fee2e2", fontWeight: 700, opacity: (deleting || deleteModal.toDelete.length === 0) ? 0.5 : 1 }}>
+                {deleting ? "Deleting…" : `Delete ${deleteModal.toDelete.length} record${deleteModal.toDelete.length !== 1 ? "s" : ""}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
