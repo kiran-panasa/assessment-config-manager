@@ -143,11 +143,18 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     setRunning("publish");
     startSSE();
     try {
-      await fetch(`${creds.serverUrl}/publish`, {
+      const res = await fetch(`${creds.serverUrl}/publish`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobile: creds.mobile, otp: creds.otp, date: selDate || null, topinLoginUrl: creds.topinLoginUrl || null }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg = data.error || `Server error (${res.status})`;
+        addLog("error", msg);
+        setRunning(null);
+        if (esRef.current) { esRef.current.close(); esRef.current = null; }
+      }
     } catch {
       addLog("error", "Failed to reach server.");
       setRunning(null);
@@ -161,15 +168,18 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     setRunning("invite");
     startSSE();
     try {
-      await fetch(`${creds.serverUrl}/invite`, {
+      const res = await fetch(`${creds.serverUrl}/invite`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apiEndpoint: creds.apiEndpoint,
-          apiToken:    creds.apiToken,
-          date:        selDate || null,
-        }),
+        body: JSON.stringify({ apiEndpoint: creds.apiEndpoint, apiToken: creds.apiToken, date: selDate || null }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg = data.error || `Server error (${res.status})`;
+        addLog("error", msg);
+        setRunning(null);
+        if (esRef.current) { esRef.current.close(); esRef.current = null; }
+      }
     } catch {
       addLog("error", "Failed to reach server.");
       setRunning(null);

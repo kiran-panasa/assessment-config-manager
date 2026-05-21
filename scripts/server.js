@@ -42,6 +42,7 @@ app.use(express.json());
 // ── SSE broadcast ─────────────────────────────────────────────────────────────
 
 const clients = new Set();
+let jobRunning = false;
 
 // Keep SSE connections alive — cloud proxies drop silent connections after ~30s
 setInterval(() => {
@@ -57,6 +58,7 @@ function broadcast(type, message, extra = {}) {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/status", (_req, res) => res.json({ jobRunning }));
 
 app.get("/progress", (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
@@ -71,23 +73,28 @@ const DEFAULT_TOPIN_LOGIN_URL =
   "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp&WINDOW_MODE=IN_APP";
 
 app.post("/publish", async (req, res) => {
+  if (jobRunning) return res.status(409).json({ error: "A job is already running. Wait for it to finish before starting another." });
   const { mobile, otp, date, topinLoginUrl } = req.body;
   if (!mobile || !otp) return res.status(400).json({ error: "mobile and otp are required" });
+  jobRunning = true;
   res.json({ started: true });
   // Small delay so the browser's EventSource connection is established first
   await new Promise(r => setTimeout(r, 400));
-  runPublish(mobile, otp, date || null, topinLoginUrl || DEFAULT_TOPIN_LOGIN_URL).catch(err =>
-    broadcast("error", `Fatal error: ${err.message}`),
-  );
+  runPublish(mobile, otp, date || null, topinLoginUrl || DEFAULT_TOPIN_LOGIN_URL)
+    .catch(err => broadcast("error", `Fatal error: ${err.message}`))
+    .finally(() => { jobRunning = false; });
 });
 
 app.post("/invite", async (req, res) => {
+  if (jobRunning) return res.status(409).json({ error: "A job is already running. Wait for it to finish before starting another." });
   const { apiEndpoint, apiToken, date } = req.body;
   if (!apiEndpoint || !apiToken) return res.status(400).json({ error: "apiEndpoint and apiToken are required" });
+  jobRunning = true;
   res.json({ started: true });
   await new Promise(r => setTimeout(r, 400));
   runInvite(apiEndpoint, apiToken, date || null)
-    .catch(err => broadcast("error", `Fatal error: ${err.message}`));
+    .catch(err => broadcast("error", `Fatal error: ${err.message}`))
+    .finally(() => { jobRunning = false; });
 });
 
 // ── Publish: Firestore fetch ──────────────────────────────────────────────────

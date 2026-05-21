@@ -290,6 +290,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
   const [t3Page, setT3Page] = useState(1);
   const [deleteModal, setDeleteModal] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [markModal, setMarkModal] = useState(null); // { session, topinId, link }
 
   const existingBids = useMemo(() => bookingRows.map(r => r.bookingId), [bookingRows]);
   const existingDocIdMap = useMemo(() => { const m = new Map(); bookingRows.forEach(r => m.set(r.bookingId, r.id)); return m; }, [bookingRows]);
@@ -421,6 +422,32 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
   const handleDeleteSession = async (id) => {
     try { await deleteDoc(doc(db, "examSessions", id)); writeLog("session_deleted", { id }); showToast("Session deleted."); }
     catch { showToast("Failed to delete.", "error"); }
+  };
+
+  const handleMarkPublished = async () => {
+    if (!markModal || !markModal.topinId.trim()) return;
+    try {
+      await updateDoc(doc(db, "examSessions", markModal.session.id), {
+        topinAssessmentId: markModal.topinId.trim(),
+        assessmentLink:    markModal.link.trim() || null,
+        publishStatus:     "published",
+        publishedAt:       new Date().toISOString(),
+        publishError:      null,
+      });
+      writeLog("manual_publish", { sessionId: markModal.session.id, topinAssessmentId: markModal.topinId.trim() });
+      showToast("Session marked as published.");
+      setMarkModal(null);
+    } catch { showToast("Failed to update session.", "error"); }
+  };
+
+  const handleResetSession = async (id) => {
+    if (!window.confirm("Reset this session to Pending? The next publish run will re-publish it on Topin.")) return;
+    try {
+      await updateDoc(doc(db, "examSessions", id), {
+        publishStatus: "pending", topinAssessmentId: null, assessmentLink: null, publishError: null,
+      });
+      showToast("Session reset to Pending.");
+    } catch { showToast("Failed to reset session.", "error"); }
   };
 
   const openDeleteModal = (table) => {
@@ -726,7 +753,21 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                                 : <span style={S.badge("#555a7a")}>Pending</span>}
                             </td>
                             <td style={S.td}>
-                              <button style={{ ...S.btn("danger"), padding: "5px 12px", fontSize: 11 }} onClick={() => handleDeleteSession(s.id)}>Del</button>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                {s.publishStatus !== "published"
+                                  ? <button
+                                      onClick={() => setMarkModal({ session: s, topinId: s.topinAssessmentId || "", link: s.assessmentLink || "" })}
+                                      style={{ ...S.btn("secondary"), padding: "5px 10px", fontSize: 11, border: "1px solid #3b82f6", color: "#3b82f6", whiteSpace: "nowrap" }}>
+                                      Mark Published
+                                    </button>
+                                  : <button
+                                      onClick={() => handleResetSession(s.id)}
+                                      style={{ ...S.btn("secondary"), padding: "5px 10px", fontSize: 11, border: "1px solid #f5a623", color: "#f5a623", whiteSpace: "nowrap" }}>
+                                      Reset
+                                    </button>
+                                }
+                                <button style={{ ...S.btn("danger"), padding: "5px 12px", fontSize: 11 }} onClick={() => handleDeleteSession(s.id)}>Del</button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -797,6 +838,50 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
           </>
         )}
       </div>
+
+      {markModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
+          <div style={{ background: "#fff", borderRadius: 12, padding: "32px 36px", maxWidth: 480, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 18, color: "#0f172a", marginBottom: 4 }}>Mark as Published</div>
+            <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 24 }}>
+              {markModal.session.assessmentTitle} — {markModal.session.dateOfAssessment} {markModal.session.startTimeSlot}
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, fontFamily: "'Inter', sans-serif", fontWeight: 700, letterSpacing: "0.06em", color: "#64748b", textTransform: "uppercase", marginBottom: 6, display: "block" }}>
+                Topin Assessment ID <span style={{ color: "#ef4444" }}>*</span>
+              </label>
+              <input
+                style={{ width: "100%", background: "#fff", border: "1px solid #dde3ed", borderRadius: 8, color: "#0f172a", padding: "10px 14px", fontFamily: "'DM Mono', monospace", fontSize: 13, outline: "none" }}
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={markModal.topinId}
+                onChange={e => setMarkModal(m => ({ ...m, topinId: e.target.value }))}
+              />
+              <div style={{ marginTop: 5, fontSize: 11, color: "#94a3b8" }}>From the published link: <code style={{ color: "#3b82f6" }}>?org_id=...</code></div>
+            </div>
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ fontSize: 11, fontFamily: "'Inter', sans-serif", fontWeight: 700, letterSpacing: "0.06em", color: "#64748b", textTransform: "uppercase", marginBottom: 6, display: "block" }}>
+                Assessment Link <span style={{ color: "#94a3b8", fontWeight: 400, textTransform: "none" }}>(optional)</span>
+              </label>
+              <input
+                style={{ width: "100%", background: "#fff", border: "1px solid #dde3ed", borderRadius: 8, color: "#0f172a", padding: "10px 14px", fontFamily: "'DM Mono', monospace", fontSize: 12, outline: "none" }}
+                placeholder="https://assessment.topin.tech/…"
+                value={markModal.link}
+                onChange={e => setMarkModal(m => ({ ...m, link: e.target.value }))}
+              />
+              <div style={{ marginTop: 5, fontSize: 11, color: "#94a3b8" }}>If provided, shows as the User Assessment Link in Invited Students.</div>
+            </div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+              <button onClick={() => setMarkModal(null)} style={{ padding: "10px 20px", borderRadius: 8, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13, cursor: "pointer", background: "#f1f5f9", color: "#475569", border: "none" }}>Cancel</button>
+              <button
+                disabled={!markModal.topinId.trim()}
+                onClick={handleMarkPublished}
+                style={{ padding: "10px 20px", borderRadius: 8, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer", background: "#3b82f6", color: "#fff", border: "none", opacity: !markModal.topinId.trim() ? 0.4 : 1 }}>
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
