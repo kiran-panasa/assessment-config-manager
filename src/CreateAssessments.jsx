@@ -1,11 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { db } from "./firebase";
 import { useAuth } from "./AuthContext";
-import { doc, getDoc, setDoc, collection, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
-// $0.000463/vCPU/min + $0.000231/GB/min  ≈ 0.5 vCPU + 512MB on Railway
-const RATE_PER_MIN = 0.000348;
-const FREE_TRIAL   = 5.00;
 
 const LOG_COLOR = {
   success: "#00c896",
@@ -35,7 +32,6 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
   const [running, setRunning] = useState(null);
   const [logs, setLogs] = useState([]);
   const [runStartTs, setRunStartTs] = useState(null);
-  const [jobLogs, setJobLogs] = useState([]);
   const logsEndRef = useRef(null);
   const esRef = useRef(null);
 
@@ -47,18 +43,6 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     }).catch(() => setCredsLoaded(true));
   }, []);
 
-  // Load job logs for this month
-  useEffect(() => {
-    const month = new Date().toISOString().slice(0, 7);
-    const unsub = onSnapshot(collection(db, "jobLogs"), snap => {
-      const logs = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(l => l.month === month)
-        .sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
-      setJobLogs(logs);
-    });
-    return () => unsub();
-  }, []);
 
   // Redirect away from credentials tab if permission is revoked mid-session
   useEffect(() => {
@@ -84,13 +68,6 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  // ── Credit calculations ───────────────────────────────────────────────────────
-  const creditStats = useMemo(() => {
-    const totalMinutes = jobLogs.reduce((sum, l) => sum + (l.durationMinutes || 0), 0);
-    const estimatedCost = totalMinutes * RATE_PER_MIN;
-    const percentUsed = Math.min((estimatedCost / FREE_TRIAL) * 100, 100);
-    return { totalMinutes: Math.round(totalMinutes * 10) / 10, estimatedCost, percentUsed };
-  }, [jobLogs]);
 
   const saveCreds = async () => {
     try {
@@ -209,7 +186,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
       <div style={S.header}>
         <span style={S.headerTitle}>Create Assessments</span>
         <nav style={S.nav}>
-          {[["run","Select & Run"], ["usage","Credit Usage"], ...(canViewCredentials ? [["credentials","Credentials"]] : [])].map(([key, label]) => (
+          {[["run","Select & Run"], ...(canViewCredentials ? [["credentials","Credentials"]] : [])].map(([key, label]) => (
             <button key={key} style={S.navItem(tab === key)} onClick={() => setTab(key)}>{label}</button>
           ))}
         </nav>
@@ -397,96 +374,6 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
           </div>
         )}
 
-        {/* ── CREDIT USAGE TAB ── */}
-        {tab === "usage" && (
-          <div style={{ animation: "fadeIn 0.2s ease" }}>
-            <div style={S.sectionTitle}>Credit Usage</div>
-            <div style={S.sectionSub}>Active job time only — idle usage appears in your Railway dashboard. Rate: ~$0.021/hour (0.5 vCPU + 512MB).</div>
-
-            {/* Summary cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
-              {[
-                [`${creditStats.totalMinutes} min`, `Active time — ${currentMonth}`, "#7eb8ff"],
-                [`$${creditStats.estimatedCost.toFixed(4)}`, "Est. active cost", "#f5a623"],
-                [`$${(FREE_TRIAL - creditStats.estimatedCost).toFixed(3)}`, "Trial credit remaining", "#00c896"],
-              ].map(([val, lbl, color]) => (
-                <div key={lbl} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "18px 22px" }}>
-                  <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 24, color }}>{val}</div>
-                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, fontFamily: "'Inter', sans-serif" }}>{lbl}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Progress bar */}
-            <div style={{ ...S.card, padding: "20px 24px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                <span style={{ fontSize: 12, fontFamily: "'Inter', sans-serif", fontWeight: 700, color: "#0f172a" }}>Free Trial Usage</span>
-                <span style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", color: "#64748b" }}>
-                  ${creditStats.estimatedCost.toFixed(4)} of ${FREE_TRIAL.toFixed(2)}
-                </span>
-              </div>
-              <div style={{ background: "#e2e8f0", borderRadius: 6, height: 10, overflow: "hidden" }}>
-                <div style={{ width: `${creditStats.percentUsed}%`, height: "100%", background: creditStats.percentUsed > 80 ? "#ff5555" : creditStats.percentUsed > 50 ? "#f5a623" : "#00c896", borderRadius: 6, transition: "width 0.5s ease" }} />
-              </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8" }}>
-                Active compute only. For total spend including idle time, check your{" "}
-                <a href="https://railway.app" target="_blank" rel="noreferrer" style={{ color: "#3b82f6" }}>Railway dashboard</a>.
-              </div>
-            </div>
-
-            {/* Job history */}
-            <div style={S.card}>
-              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#64748b", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Job History — {currentMonth}
-              </div>
-              {jobLogs.length === 0 ? (
-                <div style={{ textAlign: "center", color: "#94a3b8", padding: "32px 0", fontSize: 13 }}>No jobs run this month yet.</div>
-              ) : (
-                <table style={S.table}>
-                  <thead>
-                    <tr>
-                      {["Type", "Date", "Duration", "Result", "Est. Cost"].map(h => <th key={h} style={S.th}>{h}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobLogs.map(log => {
-                      const cost = (log.durationMinutes || 0) * RATE_PER_MIN;
-                      const result = log.type === "publish"
-                        ? `${log.passed ?? 0} published, ${log.failed ?? 0} failed`
-                        : `${log.sent ?? 0} sent, ${log.failed ?? 0} failed`;
-                      return (
-                        <tr key={log.id}
-                          onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
-                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          <td style={S.td}>
-                            <span style={S.badge(log.type === "publish" ? "#3b82f6" : "#00c896")}>
-                              {log.type}
-                            </span>
-                          </td>
-                          <td style={{ ...S.td, whiteSpace: "nowrap", fontSize: 12 }}>
-                            {log.loggedAt?.slice(0, 10) || "—"}
-                          </td>
-                          <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", fontSize: 12 }}>
-                            {log.durationMinutes?.toFixed(1) || "—"} min
-                          </td>
-                          <td style={{ ...S.td, fontSize: 12, color: "#94a3b8" }}>{result}</td>
-                          <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#f5a623" }}>
-                            ${cost.toFixed(5)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            <div style={{ padding: "14px 18px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 11, color: "#64748b", lineHeight: 1.8 }}>
-              <strong style={{ color: "#2563eb" }}>Rate used:</strong> $0.000232/min CPU + $0.000116/min RAM = $0.000348/min total&nbsp;&nbsp;·&nbsp;&nbsp;
-              <strong style={{ color: "#2563eb" }}>Free trial:</strong> $5.00 one-time (no credit card)
-            </div>
-          </div>
-        )}
 
       </div>
     </div>
