@@ -2,6 +2,8 @@ import { useState, useMemo } from "react";
 
 const PAGE_SIZE = 20;
 
+const FILTER_INIT = { contestDate: "All", skill: "All", level: "All", timeSlot: "All", inviteStatus: "All" };
+
 function deriveUserLink(assessmentLink) {
   if (!assessmentLink) return null;
   try {
@@ -19,7 +21,8 @@ const COLS = [
 ];
 
 export default function InvitedStudents({ S, bookingRows, examSessions, showToast }) {
-  const [dateFilter, setDateFilter] = useState("All");
+  const [filters, setFilters] = useState(FILTER_INIT);
+  const [search, setSearch] = useState("");
   const [pg, setPg] = useState(1);
 
   const sessionMap = useMemo(() => {
@@ -39,39 +42,95 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
       };
     }), [bookingRows, sessionMap]);
 
-  const dates = useMemo(() =>
-    [...new Set(rows.map(r => r.contestDate))].filter(Boolean).sort(),
-    [rows]);
+  const opts = useMemo(() => ({
+    contestDate: ["All", ...[...new Set(rows.map(r => r.contestDate))].filter(Boolean).sort()],
+    skill:       ["All", ...[...new Set(rows.map(r => r.skill))].filter(Boolean).sort()],
+    level:       ["All", ...[...new Set(rows.map(r => r.skillLevel))].filter(Boolean).sort()],
+    timeSlot:    ["All", ...[...new Set(rows.map(r => r.timeSlot))].filter(Boolean).sort()],
+    inviteStatus:["All", "sent", "failed", "not sent"],
+  }), [rows]);
 
-  const filtered = dateFilter === "All" ? rows : rows.filter(r => r.contestDate === dateFilter);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter(r => {
+      if (filters.contestDate !== "All" && r.contestDate !== filters.contestDate) return false;
+      if (filters.skill       !== "All" && r.skill       !== filters.skill)       return false;
+      if (filters.level       !== "All" && r.skillLevel  !== filters.level)       return false;
+      if (filters.timeSlot    !== "All" && r.timeSlot    !== filters.timeSlot)    return false;
+      if (filters.inviteStatus !== "All") {
+        const status = r.inviteStatus === "sent" ? "sent" : r.inviteStatus === "failed" ? "failed" : "not sent";
+        if (status !== filters.inviteStatus) return false;
+      }
+      if (q) {
+        const haystack = [r.studentName, r.niatId, r.studentUid, r.uniqueExamId].join(" ").toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [rows, filters, search]);
+
   const pages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((pg - 1) * PAGE_SIZE, pg * PAGE_SIZE);
+
+  const setFilter = (key, val) => { setFilters(f => ({ ...f, [key]: val })); setPg(1); };
+  const resetFilters = () => { setFilters(FILTER_INIT); setSearch(""); setPg(1); };
+  const anyActive = Object.values(filters).some(v => v !== "All") || search.trim() !== "";
 
   const copyLink = (link) => {
     navigator.clipboard.writeText(link).then(() => showToast("Link copied!")).catch(() => showToast("Copy failed.", "error"));
   };
+
+  const selStyle = { ...S.select, width: "auto", minWidth: 120 };
 
   return (
     <div style={{ animation: "fadeIn 0.2s ease" }}>
       <div style={S.header}>
         <span style={S.headerTitle}>Invited Students</span>
         <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, fontSize: 12, color: "#94a3b8" }}>
-          {rows.length} students
+          {filtered.length !== rows.length ? `${filtered.length} of ${rows.length} students` : `${rows.length} students`}
         </div>
       </div>
 
       <div style={S.body}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <div style={S.sectionTitle}>Invited Students</div>
-            <div style={{ ...S.sectionSub, marginBottom: 0 }}>All students with their personalised assessment links.</div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ ...S.label, marginBottom: 0, whiteSpace: "nowrap" }}>Filter by date</span>
-            <select style={{ ...S.select, width: 170 }} value={dateFilter} onChange={e => { setDateFilter(e.target.value); setPg(1); }}>
-              <option value="All">All Dates</option>
-              {dates.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
+        <div style={{ marginBottom: 20 }}>
+          <div style={S.sectionTitle}>Invited Students</div>
+          <div style={{ ...S.sectionSub, marginBottom: 16 }}>All students with their personalised assessment links.</div>
+
+          {/* Search + Filters */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+            {/* Text search */}
+            <input
+              type="text"
+              placeholder="Search name, NIAT ID, UID, Exam ID…"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPg(1); }}
+              style={{ ...S.input, margin: 0, width: 260, fontSize: 12 }}
+            />
+
+            {/* Dropdown filters */}
+            {[
+              ["contestDate", "Date"],
+              ["skill",       "Skill"],
+              ["level",       "Level"],
+              ["timeSlot",    "Time Slot"],
+              ["inviteStatus","Invite"],
+            ].map(([key, label]) => (
+              <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Inter', sans-serif", fontWeight: 600, whiteSpace: "nowrap" }}>{label}</span>
+                <select style={{ ...selStyle, borderColor: filters[key] !== "All" ? "#00c896" : undefined }}
+                  value={filters[key]} onChange={e => setFilter(key, e.target.value)}>
+                  {opts[key].map(v => (
+                    <option key={v} value={v}>{v === "All" ? `All ${label}s` : v}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+
+            {anyActive && (
+              <button onClick={resetFilters} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>
+                Reset
+              </button>
+            )}
           </div>
         </div>
 
@@ -79,9 +138,12 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
           {filtered.length === 0 ? (
             <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0", fontSize: 13 }}>
               <div style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8" }}>
-                {rows.length === 0 ? "No data yet" : "No results for selected date"}
+                {rows.length === 0 ? "No data yet" : "No results for selected filters"}
               </div>
               {rows.length === 0 && "Upload a CSV and publish assessments to populate this table."}
+              {rows.length > 0 && anyActive && (
+                <button onClick={resetFilters} style={{ ...S.btn("secondary"), marginTop: 12, fontSize: 12 }}>Clear filters</button>
+              )}
             </div>
           ) : (
             <>
