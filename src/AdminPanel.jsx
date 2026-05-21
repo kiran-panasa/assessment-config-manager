@@ -7,10 +7,11 @@ import {
 } from "firebase/firestore";
 
 const ALL_PAGES = [
-  { key: "assessments", label: "Assessment Configurations" },
-  { key: "bookings",    label: "Student Bookings" },
-  { key: "create",      label: "Create Assessments" },
-  { key: "invited",     label: "Invited Students" },
+  { key: "assessments",  label: "Assessment Configurations" },
+  { key: "bookings",     label: "Student Bookings" },
+  { key: "create",       label: "Create Assessments" },
+  { key: "invited",      label: "Invited Students" },
+  { key: "credentials",  label: "Credentials Tab (server secret)" },
 ];
 
 const labelStyle = {

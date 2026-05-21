@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { db } from "./firebase";
+import { useAuth } from "./AuthContext";
 import { doc, getDoc, setDoc, collection, onSnapshot } from "firebase/firestore";
 
 // $0.000463/vCPU/min + $0.000231/GB/min  ≈ 0.5 vCPU + 512MB on Railway
@@ -15,7 +16,9 @@ const LOG_COLOR = {
 };
 
 export default function CreateAssessments({ S, examSessions, bookingRows, showToast }) {
-  const [tab, setTab] = useState("credentials");
+  const { allowedPages } = useAuth();
+  const canViewCredentials = allowedPages.includes("credentials");
+  const [tab, setTab] = useState("run");
   const [serverOnline, setServerOnline] = useState(null);
 
   const [creds, setCreds] = useState({
@@ -56,6 +59,11 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     });
     return () => unsub();
   }, []);
+
+  // Redirect away from credentials tab if permission is revoked mid-session
+  useEffect(() => {
+    if (tab === "credentials" && !canViewCredentials) setTab("run");
+  }, [canViewCredentials, tab]);
 
   // Server health check — restarts whenever serverUrl changes
   useEffect(() => {
@@ -201,7 +209,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
       <div style={S.header}>
         <span style={S.headerTitle}>Create Assessments</span>
         <nav style={S.nav}>
-          {[["credentials","Credentials"], ["run","Select & Run"], ["usage","Credit Usage"]].map(([key, label]) => (
+          {[["run","Select & Run"], ["usage","Credit Usage"], ...(canViewCredentials ? [["credentials","Credentials"]] : [])].map(([key, label]) => (
             <button key={key} style={S.navItem(tab === key)} onClick={() => setTab(key)}>{label}</button>
           ))}
         </nav>

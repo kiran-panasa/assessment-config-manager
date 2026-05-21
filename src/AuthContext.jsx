@@ -10,7 +10,7 @@ const BOOTSTRAP_EMAIL = "kiran.p@nxtwave.tech";
 const DEFAULT_ROLES = [
   { key: "content-team", name: "Content Team", pages: ["assessments"], isSystem: true },
   { key: "central-ops",  name: "Central Ops",  pages: ["bookings", "invited"], isSystem: true },
-  { key: "admin",        name: "Admin",         pages: ["assessments", "bookings", "create", "invited"], isSystem: true },
+  { key: "admin",        name: "Admin",         pages: ["assessments", "bookings", "create", "invited", "credentials"], isSystem: true },
 ];
 
 async function seedRoles() {
