@@ -30,6 +30,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
   const [selDate, setSelDate] = useState("");
   const [running, setRunning] = useState(null);
   const [logs, setLogs] = useState([]);
+  const [runStartTs, setRunStartTs] = useState(null);
   const [jobLogs, setJobLogs] = useState([]);
   const logsEndRef = useRef(null);
   const esRef = useRef(null);
@@ -108,16 +109,18 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     };
   }, [examSessions, bookingRows, selDate]);
 
-  const addLog = (type, message) =>
-    setLogs(prev => [...prev, { type, message, id: Date.now() + Math.random() }]);
+  const addLog = (type, message, ts = Date.now()) =>
+    setLogs(prev => [...prev, { type, message, ts, id: ts + Math.random() }]);
 
   const startSSE = () => {
     if (esRef.current) esRef.current.close();
+    const start = Date.now();
+    setRunStartTs(start);
     const es = new EventSource(`${creds.serverUrl}/progress`);
     esRef.current = es;
     es.onmessage = (e) => {
       const data = JSON.parse(e.data);
-      addLog(data.type, data.message);
+      addLog(data.type, data.message, data.ts || Date.now());
       if (data.type === "done") {
         setRunning(null);
         es.close();
@@ -343,12 +346,20 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
               <div style={{ ...S.card, padding: 0, overflow: "hidden" }}>
                 <div style={{ padding: "14px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Progress Log</span>
-                  <button style={{ ...S.btn("secondary"), padding: "4px 12px", fontSize: 11 }} onClick={() => setLogs([])}>Clear</button>
+                  <button style={{ ...S.btn("secondary"), padding: "4px 12px", fontSize: 11 }} onClick={() => { setLogs([]); setRunStartTs(null); }}>Clear</button>
                 </div>
                 <div style={{ background: "#0a0b10", padding: "16px 20px", maxHeight: 420, overflowY: "auto", fontFamily: "'DM Mono', monospace", fontSize: 12.5, lineHeight: 1.9 }}>
-                  {logs.map(entry => (
-                    <div key={entry.id} style={{ color: LOG_COLOR[entry.type] || "#e0e0e8" }}>{entry.message}</div>
-                  ))}
+                  {logs.map((entry) => {
+                    const elapsed = runStartTs ? Math.max(0, Math.round((entry.ts - runStartTs) / 1000)) : 0;
+                    const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+                    const ss = String(elapsed % 60).padStart(2, "0");
+                    return (
+                      <div key={entry.id} style={{ display: "flex", gap: 10, color: LOG_COLOR[entry.type] || "#e0e0e8" }}>
+                        <span style={{ color: "#3a4a5c", flexShrink: 0, userSelect: "none" }}>[{mm}:{ss}]</span>
+                        <span>{entry.message}</span>
+                      </div>
+                    );
+                  })}
                   <div ref={logsEndRef} />
                 </div>
               </div>
