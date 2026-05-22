@@ -393,20 +393,27 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
     setProcessing(true);
     const batchId = Date.now().toString();
     try {
-      const fbBatch = writeBatch(db);
+      const ops = [];
       for (const row of rowsToSave) {
         const data = { ...row, uploadBatchId: batchId, uploadedAt: serverTimestamp() };
         const existId = existingDocIdMap.get(row.bookingId);
         if (existId && dupChoice === "overwrite") {
-          fbBatch.update(doc(db, "bookingRows", existId), data);
+          ops.push({ type: "update", ref: doc(db, "bookingRows", existId), data });
         } else if (!existId) {
-          fbBatch.set(doc(collection(db, "bookingRows")), data);
+          ops.push({ type: "set", ref: doc(collection(db, "bookingRows")), data });
         }
       }
       for (const session of csvData.newSessions) {
-        fbBatch.set(doc(collection(db, "examSessions")), { ...session, publishStatus: "pending", uploadBatchId: batchId, uploadedAt: serverTimestamp() });
+        ops.push({ type: "set", ref: doc(collection(db, "examSessions")), data: { ...session, publishStatus: "pending", uploadBatchId: batchId, uploadedAt: serverTimestamp() } });
       }
-      await fbBatch.commit();
+      for (let i = 0; i < ops.length; i += 499) {
+        const fbBatch = writeBatch(db);
+        for (const op of ops.slice(i, i + 499)) {
+          if (op.type === "update") fbBatch.update(op.ref, op.data);
+          else fbBatch.set(op.ref, op.data);
+        }
+        await fbBatch.commit();
+      }
       writeLog("csv_upload", { batchId, bookings: rowsToSave.length, sessions: csvData.newSessions.length });
       showToast(`Saved: ${rowsToSave.length} bookings, ${csvData.newSessions.length} new sessions.`);
       setCsvData(null); setDupChoice(null);

@@ -172,7 +172,13 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     }
   };
 
-  const cancelJob = () => {
+  const cancelJob = async () => {
+    try {
+      await fetch(`${creds.serverUrl}/cancel`, {
+        method: "POST",
+        headers: creds.serverSecret ? { "x-server-token": creds.serverSecret } : {},
+      });
+    } catch { /* best-effort */ }
     setRunning(null);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
   };

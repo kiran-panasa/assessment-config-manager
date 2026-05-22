@@ -46,6 +46,7 @@ app.use(express.json());
 
 const clients = new Set();
 let jobRunning = false;
+let cancelRequested = false;
 
 // Keep SSE connections alive — cloud proxies drop silent connections after ~30s
 setInterval(() => {
@@ -110,6 +111,13 @@ function requireSecret(req, res, next) {
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.get("/status", (_req, res) => res.json({ jobRunning }));
+app.post("/cancel", requireSecret, (_req, res) => {
+  if (jobRunning) {
+    cancelRequested = true;
+    broadcast("warn", "Cancel requested — stopping after current step…");
+  }
+  res.json({ ok: true });
+});
 
 app.get("/progress", (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
@@ -549,6 +557,7 @@ async function logJob(type, startMs, stats) {
 
 async function runPublish(mobile, otp, date, loginUrl) {
   const startMs = Date.now();
+  cancelRequested = false;
   broadcast("info", "Fetching sessions from Firestore…");
   const { assessments, sessions } = await fetchPublishData(date);
 
@@ -578,6 +587,10 @@ async function runPublish(mobile, otp, date, loginUrl) {
     }
 
     for (const session of sessions) {
+      if (cancelRequested) {
+        broadcast("warn", "Job cancelled.");
+        break;
+      }
       const num = passed + failed + 1;
       broadcast("info", `\n[${num}/${sessions.length}] ${session.assessmentTitle} — ${session.dateOfAssessment} ${session.startTimeSlot}`);
 
@@ -664,6 +677,7 @@ async function callInviteAPIBatch(endpoint, apiKey, studentUids, assessmentId) {
 
 async function runInvite(apiEndpoint, apiToken, date) {
   const startMs = Date.now();
+  cancelRequested = false;
   broadcast("info", "Fetching bookings from Firestore…");
   const { bookings, sessionMap } = await fetchInviteData(date);
 
@@ -700,6 +714,10 @@ async function runInvite(apiEndpoint, apiToken, date) {
     const totalBatches = Math.ceil(students.length / INVITE_BATCH_SIZE);
 
     for (let i = 0; i < students.length; i += INVITE_BATCH_SIZE) {
+      if (cancelRequested) {
+        broadcast("warn", "Job cancelled.");
+        break;
+      }
       const batch = students.slice(i, i + INVITE_BATCH_SIZE);
       const batchNum = Math.floor(i / INVITE_BATCH_SIZE) + 1;
       broadcast("info", `Batch ${batchNum}/${totalBatches} — ${batch.length} students`);
