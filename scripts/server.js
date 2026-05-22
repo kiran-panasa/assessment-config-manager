@@ -151,7 +151,7 @@ app.post("/invite", requireSecret, async (req, res) => {
 // ── Publish: Firestore fetch ──────────────────────────────────────────────────
 
 async function fetchPublishData(date) {
-  let sessionsQuery = query(collection(db, "examSessions"), where("publishStatus", "in", ["pending", "failed"]));
+  let sessionsQuery = collection(db, "examSessions");
   if (date) sessionsQuery = query(sessionsQuery, where("dateOfAssessment", "==", date));
 
   const [assessmentsSnap, sessionsSnap] = await Promise.all([
@@ -160,7 +160,9 @@ async function fetchPublishData(date) {
   ]);
 
   const assessments = assessmentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  const sessions = sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const sessions = sessionsSnap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(s => s.publishStatus !== "published");
 
   return { assessments, sessions };
 }

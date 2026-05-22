@@ -404,7 +404,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
         }
       }
       for (const session of csvData.newSessions) {
-        fbBatch.set(doc(collection(db, "examSessions")), { ...session, uploadBatchId: batchId, uploadedAt: serverTimestamp() });
+        fbBatch.set(doc(collection(db, "examSessions")), { ...session, publishStatus: "pending", uploadBatchId: batchId, uploadedAt: serverTimestamp() });
       }
       await fbBatch.commit();
       writeLog("csv_upload", { batchId, bookings: rowsToSave.length, sessions: csvData.newSessions.length });
