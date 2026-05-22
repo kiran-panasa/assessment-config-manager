@@ -16,6 +16,7 @@
 import express from "express";
 import cors from "cors";
 import { chromium } from "playwright";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, getDocs, doc, updateDoc, addDoc } from "firebase/firestore";
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
@@ -55,6 +56,41 @@ function broadcast(type, message, extra = {}) {
   const data = JSON.stringify({ type, message, ts: Date.now(), ...extra });
   for (const res of clients) res.write(`data: ${data}\n\n`);
   console.log(`[${type.toUpperCase()}] ${message}`);
+}
+
+// ── Session cookie persistence ────────────────────────────────────────────────
+// Saves Topin browser cookies after a successful OTP login so subsequent runs
+// can skip the OTP flow entirely (saves ~1–2 min per publish run).
+
+const COOKIES_FILE = "./topin-session.json";
+
+async function saveSession(context) {
+  try {
+    const cookies = await context.cookies();
+    writeFileSync(COOKIES_FILE, JSON.stringify(cookies));
+    broadcast("info", "[SESSION] Cookies saved — next run will skip OTP login.");
+  } catch { /* non-fatal */ }
+}
+
+async function tryRestoreSession(context, page) {
+  if (!existsSync(COOKIES_FILE)) return false;
+  try {
+    const cookies = JSON.parse(readFileSync(COOKIES_FILE, "utf8"));
+    await context.addCookies(cookies);
+    // Verify the session is still valid by navigating to the app
+    await page.goto("https://config.topin.tech", { waitUntil: "domcontentloaded", timeout: 20000 });
+    const url = page.url();
+    const valid = url.includes("config.topin.tech") && !url.includes("accounts.ccbp.in");
+    if (valid) {
+      broadcast("success", "[SESSION] Restored saved session — skipping OTP login.");
+      return true;
+    }
+    broadcast("info", "[SESSION] Saved session expired — falling back to OTP login.");
+    return false;
+  } catch {
+    broadcast("info", "[SESSION] Could not restore session — falling back to OTP login.");
+    return false;
+  }
 }
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
@@ -143,7 +179,6 @@ async function trySelector(page, selectors, timeout = 8000) {
 async function loginToTopin(page, mobile, otp, loginUrl) {
   broadcast("info", "Navigating to Topin login…");
   await page.goto(loginUrl, { waitUntil: "load", timeout: 30000 });
-  await page.waitForTimeout(3000);
 
   const currentUrl = page.url();
   broadcast("info", `  Page URL: ${currentUrl}`);
@@ -203,7 +238,6 @@ async function loginToTopin(page, mobile, otp, loginUrl) {
   ], 5000);
   if (!otpBtnSel) throw new Error("Could not find Get OTP button on Topin login page.");
   await page.click(otpBtnSel);
-  await page.waitForTimeout(2500);
 
   // OTP input — split boxes or single field
   const otpInputSel = await trySelector(page, [
@@ -229,14 +263,11 @@ async function loginToTopin(page, mobile, otp, loginUrl) {
   ], 5000);
   if (!verifyBtnSel) throw new Error("Could not find Verify OTP button on Topin login page.");
   await page.click(verifyBtnSel);
-  await page.waitForTimeout(4000);
 
-  // Warm up the config.topin.tech domain so auth cookies are set before we
-  // navigate to individual assessment URLs — prevents the ?auth_code= redirect
-  // from interrupting each assessment page load.
-  broadcast("info", "  Initialising session on config.topin.tech…");
-  await page.goto("https://config.topin.tech", { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-  await page.waitForTimeout(3000);
+  // Wait for redirect to config.topin.tech — confirms login succeeded
+  broadcast("info", "  Waiting for login redirect…");
+  await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 });
+  await page.waitForLoadState("domcontentloaded", { timeout: 15000 });
   broadcast("success", "Logged in to Topin");
 }
 
@@ -380,9 +411,9 @@ async function publishOneSession(page, session, assessments) {
     broadcast("info", `  Auth redirect incomplete — still on ${page.url()}`);
   }
   await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
-  await page.waitForTimeout(6000);
 
   // ── 2. Clone button — text-based locator, retry with re-navigation ────────
+  // No fixed sleep: waitFor({ timeout: 30000 }) blocks until the button appears
   const cloneLocator = page.locator('button, a, [role="button"]').filter({ hasText: /clone/i }).first();
   let cloneFound = false;
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -396,7 +427,6 @@ async function publishOneSession(page, session, assessments) {
         await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
         try { await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 }); } catch { /* proceed */ }
         await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
-        await page.waitForTimeout(6000);
       }
     }
   }
@@ -449,7 +479,6 @@ async function publishOneSession(page, session, assessments) {
 
   // ── 9. Save & Next → Publish page ────────────────────────────────────────
   await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click({ timeout: 30000 });
-  await page.waitForTimeout(3000);
   broadcast("info", "  On Publish & Invite page…");
 
   // ── 10. Publish ───────────────────────────────────────────────────────────
@@ -532,13 +561,18 @@ async function runPublish(mobile, otp, date, loginUrl) {
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
   });
-  const page    = await browser.newPage();
-  page.setDefaultTimeout(20000);
+  const context = await browser.newContext();
+  const page    = await context.newPage();
+  page.setDefaultTimeout(30000);
 
   let passed = 0, failed = 0;
 
   try {
-    await loginToTopin(page, mobile, otp, loginUrl);
+    const restored = await tryRestoreSession(context, page);
+    if (!restored) {
+      await loginToTopin(page, mobile, otp, loginUrl);
+      await saveSession(context);
+    }
 
     for (const session of sessions) {
       const num = passed + failed + 1;
@@ -563,7 +597,7 @@ async function runPublish(mobile, otp, date, loginUrl) {
         failed++;
       }
 
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(200);
     }
   } finally {
     await browser.close();

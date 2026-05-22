@@ -3,5 +3,6 @@ dist/
 .env
 .env.local
 
-# Topin automation scripts — credentials file (never commit)
+# Topin automation scripts — credentials and session files (never commit)
 scripts/config.js
+scripts/topin-session.json
