@@ -49,7 +49,10 @@ let jobRunning = false;
 
 // Keep SSE connections alive — cloud proxies drop silent connections after ~30s
 setInterval(() => {
-  for (const res of clients) res.write(": heartbeat\n\n");
+  for (const res of clients) {
+    try { res.write(": heartbeat\n\n"); }
+    catch { clients.delete(res); }
+  }
 }, 15000);
 
 function broadcast(type, message, extra = {}) {
@@ -633,15 +636,26 @@ const INVITE_BATCH_SIZE = 20;
 
 async function callInviteAPIBatch(endpoint, apiKey, studentUids, assessmentId) {
   const payload = { candidate_user_ids: studentUids, assessment_id: assessmentId };
-  const res = await fetch(endpoint, {
-    method:  "POST",
-    headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
-    body:    JSON.stringify(payload),
-  });
-  const text = await res.text().catch(() => "");
-  let json = {};
-  try { json = JSON.parse(text); } catch { /* non-JSON response */ }
-  return { ok: res.ok, status: res.status, json, text };
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(endpoint, {
+        method:  "POST",
+        headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
+        body:    JSON.stringify(payload),
+      });
+      const text = await res.text().catch(() => "");
+      let json = {};
+      try { json = JSON.parse(text); } catch { /* non-JSON response */ }
+      if (res.ok || res.status < 500) return { ok: res.ok, status: res.status, json, text };
+      // 5xx — worth retrying
+      lastErr = new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      lastErr = err;
+    }
+    if (attempt < 3) await new Promise(r => setTimeout(r, 500 * 2 ** (attempt - 1)));
+  }
+  throw lastErr;
 }
 
 // ── Invite: main loop ─────────────────────────────────────────────────────────

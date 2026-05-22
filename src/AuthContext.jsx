@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { auth, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import {
-  doc, onSnapshot, collection, getDocs, setDoc, serverTimestamp,
+  doc, onSnapshot, getDoc, setDoc, serverTimestamp,
 } from "firebase/firestore";
 
 const BOOTSTRAP_EMAIL = "kiran.p@nxtwave.tech";
@@ -14,11 +14,13 @@ const DEFAULT_ROLES = [
 ];
 
 async function seedRoles() {
-  const snap = await getDocs(collection(db, "roles"));
-  if (!snap.empty) return;
+  const flagRef = doc(db, "config", "seeds");
+  const flag = await getDoc(flagRef);
+  if (flag.exists()) return;
   for (const role of DEFAULT_ROLES) {
     await setDoc(doc(db, "roles", role.key), { ...role, createdAt: serverTimestamp() });
   }
+  await setDoc(flagRef, { rolesSeeded: true, seededAt: serverTimestamp() });
 }
 
 const AuthContext = createContext(null);
@@ -41,10 +43,13 @@ export function AuthProvider({ children }) {
     let unsubUser = null;
     let unsubRole = null;
 
+    let lastRoleKey = null;
+
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (unsubUser) { unsubUser(); unsubUser = null; }
       if (unsubRole) { unsubRole(); unsubRole = null; }
+      lastRoleKey = null;
 
       if (!user) {
         setUserProfile(null);
@@ -64,18 +69,22 @@ export function AuthProvider({ children }) {
         const profile = { id: snap.id, ...snap.data() };
         setUserProfile(profile);
 
-        if (unsubRole) { unsubRole(); unsubRole = null; }
-
         if (!profile.role || profile.status !== "active") {
+          if (unsubRole) { unsubRole(); unsubRole = null; }
+          lastRoleKey = null;
           setAllowedPages([]);
           setAuthLoading(false);
           return;
         }
 
-        unsubRole = onSnapshot(doc(db, "roles", profile.role), (roleSnap) => {
-          setAllowedPages(roleSnap.exists() ? roleSnap.data().pages ?? [] : []);
-          setAuthLoading(false);
-        });
+        if (profile.role !== lastRoleKey) {
+          lastRoleKey = profile.role;
+          if (unsubRole) { unsubRole(); unsubRole = null; }
+          unsubRole = onSnapshot(doc(db, "roles", profile.role), (roleSnap) => {
+            setAllowedPages(roleSnap.exists() ? roleSnap.data().pages ?? [] : []);
+            setAuthLoading(false);
+          });
+        }
       });
     });
 

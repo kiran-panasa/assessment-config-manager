@@ -10,7 +10,7 @@ import PendingPage from "./PendingPage";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
   setDoc, getDoc, onSnapshot, serverTimestamp,
-  arrayUnion, arrayRemove, query, where,
+  arrayUnion, arrayRemove, query, where, orderBy,
 } from "firebase/firestore";
 
 const DEFAULT_SKILLS = [
@@ -992,20 +992,16 @@ function AppInner() {
     const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
     const unsubB = onSnapshot(
-      query(collection(db, "bookingRows"), where("contestDate", ">=", cutoff)),
+      query(collection(db, "bookingRows"), where("contestDate", ">=", cutoff), orderBy("contestDate", "asc")),
       snap => {
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        data.sort((a, b) => (a.uploadedAt?.toMillis?.() ?? 0) - (b.uploadedAt?.toMillis?.() ?? 0));
-        setBookingRows(data);
+        setBookingRows(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }
     );
 
     const unsubS = onSnapshot(
-      query(collection(db, "examSessions"), where("dateOfAssessment", ">=", cutoff)),
+      query(collection(db, "examSessions"), where("dateOfAssessment", ">=", cutoff), orderBy("dateOfAssessment", "asc")),
       snap => {
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        data.sort((a, b) => (a.uploadedAt?.toMillis?.() ?? 0) - (b.uploadedAt?.toMillis?.() ?? 0));
-        setExamSessions(data);
+        setExamSessions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }
     );
 
