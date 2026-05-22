@@ -110,6 +110,8 @@ export default function AdminPanel({ S, showToast }) {
   const handleRoleChange = async (user) => {
     const newRole = userRoleMap[user.id];
     if (!newRole || newRole === user.role) return;
+    const roleName = roles.find(r => r.key === newRole)?.name || newRole;
+    if (!window.confirm(`Change role for ${user.email} to "${roleName}"?`)) return;
     setSavingKey(user.id, true);
     try {
       await updateDoc(doc(db, "users", user.id), { role: newRole });

@@ -18,7 +18,7 @@ import cors from "cors";
 import { chromium } from "playwright";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs, doc, updateDoc, addDoc } from "firebase/firestore";
+import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, writeBatch } from "firebase/firestore";
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
@@ -699,42 +699,49 @@ async function runInvite(apiEndpoint, apiToken, date) {
           const failedUids = new Set(
             (json.failed_users_details || []).map(f => String(f.user_id || "").trim()),
           );
+          const now = new Date().toISOString();
+          const fbBatch = writeBatch(db);
 
           for (const booking of batch) {
             if (failedUids.has(booking.studentUid)) {
               const reason = (json.failed_users_details || [])
                 .find(f => String(f.user_id) === booking.studentUid)?.reason || "Failed";
               broadcast("error", `  ${booking.studentName || booking.studentUid}: ${reason}`);
-              await updateDoc(doc(db, "bookingRows", booking.firestoreId), {
+              fbBatch.update(doc(db, "bookingRows", booking.firestoreId), {
                 inviteStatus: "failed", inviteError: reason,
-              }).catch(() => {});
+              });
               failed++;
             } else {
-              await updateDoc(doc(db, "bookingRows", booking.firestoreId), {
-                inviteStatus: "sent", invitedAt: new Date().toISOString(), inviteError: null,
+              fbBatch.update(doc(db, "bookingRows", booking.firestoreId), {
+                inviteStatus: "sent", invitedAt: now, inviteError: null,
               });
               sent++;
             }
           }
+          await fbBatch.commit();
           broadcast("success", `  ${batch.length - failedUids.size} sent, ${failedUids.size} failed`);
         } else {
           const errorMsg = json.res_status || `HTTP ${status}`;
           broadcast("error", `  Batch failed: ${errorMsg}`);
+          const fbBatch = writeBatch(db);
           for (const booking of batch) {
-            await updateDoc(doc(db, "bookingRows", booking.firestoreId), {
+            fbBatch.update(doc(db, "bookingRows", booking.firestoreId), {
               inviteStatus: "failed", inviteError: errorMsg,
-            }).catch(() => {});
+            });
             failed++;
           }
+          await fbBatch.commit().catch(() => {});
         }
       } catch (err) {
         broadcast("error", `  Batch error: ${err.message}`);
+        const fbBatch = writeBatch(db);
         for (const booking of batch) {
-          await updateDoc(doc(db, "bookingRows", booking.firestoreId), {
+          fbBatch.update(doc(db, "bookingRows", booking.firestoreId), {
             inviteStatus: "failed", inviteError: err.message,
-          }).catch(() => {});
+          });
           failed++;
         }
+        await fbBatch.commit().catch(() => {});
       }
 
       await new Promise(r => setTimeout(r, 2000)); // 2s between batches
