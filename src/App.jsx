@@ -10,7 +10,7 @@ import PendingPage from "./PendingPage";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
   setDoc, getDoc, onSnapshot, serverTimestamp,
-  arrayUnion, arrayRemove, query, where, orderBy,
+  arrayUnion, arrayRemove, query, where, orderBy, writeBatch,
 } from "firebase/firestore";
 
 const DEFAULT_SKILLS = [
@@ -393,18 +393,20 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
     setProcessing(true);
     const batchId = Date.now().toString();
     try {
+      const fbBatch = writeBatch(db);
       for (const row of rowsToSave) {
         const data = { ...row, uploadBatchId: batchId, uploadedAt: serverTimestamp() };
         const existId = existingDocIdMap.get(row.bookingId);
         if (existId && dupChoice === "overwrite") {
-          await updateDoc(doc(db, "bookingRows", existId), data);
+          fbBatch.update(doc(db, "bookingRows", existId), data);
         } else if (!existId) {
-          await addDoc(collection(db, "bookingRows"), data);
+          fbBatch.set(doc(collection(db, "bookingRows")), data);
         }
       }
       for (const session of csvData.newSessions) {
-        await addDoc(collection(db, "examSessions"), { ...session, uploadBatchId: batchId, uploadedAt: serverTimestamp() });
+        fbBatch.set(doc(collection(db, "examSessions")), { ...session, uploadBatchId: batchId, uploadedAt: serverTimestamp() });
       }
+      await fbBatch.commit();
       writeLog("csv_upload", { batchId, bookings: rowsToSave.length, sessions: csvData.newSessions.length });
       showToast(`Saved: ${rowsToSave.length} bookings, ${csvData.newSessions.length} new sessions.`);
       setCsvData(null); setDupChoice(null);
@@ -467,9 +469,11 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
     setDeleting(true);
     try {
       const collName = deleteModal.table === "bookings" ? "bookingRows" : "examSessions";
+      const fbBatch = writeBatch(db);
       for (const record of deleteModal.toDelete) {
-        await deleteDoc(doc(db, collName, record.id));
+        fbBatch.delete(doc(db, collName, record.id));
       }
+      await fbBatch.commit();
       writeLog("bulk_delete", { table: collName, count: deleteModal.toDelete.length });
       showToast(`Deleted ${deleteModal.toDelete.length} records.`);
       setDeleteModal(null);
@@ -978,10 +982,9 @@ function AppInner() {
     const configRef = doc(db, "config", "main");
     getDoc(configRef).then(snap => { if (!snap.exists()) setDoc(configRef, { skills: DEFAULT_SKILLS, levels: DEFAULT_LEVELS }); });
 
-    const unsubA = onSnapshot(collection(db, "assessments"), snap => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
-      setAssessments(data); setFirestoreLoading(false);
+    const unsubA = onSnapshot(query(collection(db, "assessments"), orderBy("createdAt", "asc")), snap => {
+      setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setFirestoreLoading(false);
     }, () => setFirestoreLoading(false));
 
     const unsubC = onSnapshot(configRef, snap => {

@@ -18,7 +18,7 @@ import cors from "cors";
 import { chromium } from "playwright";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, writeBatch } from "firebase/firestore";
+import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, writeBatch, query, where } from "firebase/firestore";
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
@@ -151,18 +151,16 @@ app.post("/invite", requireSecret, async (req, res) => {
 // ── Publish: Firestore fetch ──────────────────────────────────────────────────
 
 async function fetchPublishData(date) {
+  let sessionsQuery = query(collection(db, "examSessions"), where("publishStatus", "in", ["pending", "failed"]));
+  if (date) sessionsQuery = query(sessionsQuery, where("dateOfAssessment", "==", date));
+
   const [assessmentsSnap, sessionsSnap] = await Promise.all([
     getDocs(collection(db, "assessments")),
-    getDocs(collection(db, "examSessions")),
+    getDocs(sessionsQuery),
   ]);
 
   const assessments = assessmentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-  let sessions = sessionsSnap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .filter(s => s.publishStatus !== "published");
-
-  if (date) sessions = sessions.filter(s => s.dateOfAssessment === date);
+  const sessions = sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   return { assessments, sessions };
 }
@@ -613,13 +611,15 @@ async function runPublish(mobile, otp, date, loginUrl) {
 // ── Invite: Firestore fetch ───────────────────────────────────────────────────
 
 async function fetchInviteData(date) {
+  let bookingsQuery = collection(db, "bookingRows");
+  if (date) bookingsQuery = query(bookingsQuery, where("contestDate", "==", date));
+
   const [bookingsSnap, sessionsSnap] = await Promise.all([
-    getDocs(collection(db, "bookingRows")),
-    getDocs(collection(db, "examSessions")),
+    getDocs(bookingsQuery),
+    getDocs(query(collection(db, "examSessions"), where("publishStatus", "==", "published"))),
   ]);
 
-  let bookings = bookingsSnap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
-  if (date) bookings = bookings.filter(b => b.contestDate === date);
+  const bookings = bookingsSnap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
 
   const sessionMap = new Map();
   sessionsSnap.docs.forEach(d => {
