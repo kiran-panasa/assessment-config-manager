@@ -10,7 +10,7 @@ import PendingPage from "./PendingPage";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
   setDoc, getDoc, onSnapshot, serverTimestamp,
-  arrayUnion, arrayRemove,
+  arrayUnion, arrayRemove, query, where,
 } from "firebase/firestore";
 
 const DEFAULT_SKILLS = [
@@ -988,17 +988,26 @@ function AppInner() {
       if (snap.exists()) { const d = snap.data(); if (d.skills) setSkills(d.skills); if (d.levels) setLevels(d.levels); }
     });
 
-    const unsubB = onSnapshot(collection(db, "bookingRows"), snap => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => (a.uploadedAt?.toMillis?.() ?? 0) - (b.uploadedAt?.toMillis?.() ?? 0));
-      setBookingRows(data);
-    });
+    // Only load data from the last 90 days onward — filters at Firestore level
+    const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const unsubS = onSnapshot(collection(db, "examSessions"), snap => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => (a.uploadedAt?.toMillis?.() ?? 0) - (b.uploadedAt?.toMillis?.() ?? 0));
-      setExamSessions(data);
-    });
+    const unsubB = onSnapshot(
+      query(collection(db, "bookingRows"), where("contestDate", ">=", cutoff)),
+      snap => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        data.sort((a, b) => (a.uploadedAt?.toMillis?.() ?? 0) - (b.uploadedAt?.toMillis?.() ?? 0));
+        setBookingRows(data);
+      }
+    );
+
+    const unsubS = onSnapshot(
+      query(collection(db, "examSessions"), where("dateOfAssessment", ">=", cutoff)),
+      snap => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        data.sort((a, b) => (a.uploadedAt?.toMillis?.() ?? 0) - (b.uploadedAt?.toMillis?.() ?? 0));
+        setExamSessions(data);
+      }
+    );
 
     return () => { unsubA(); unsubC(); unsubB(); unsubS(); };
   }, []);
