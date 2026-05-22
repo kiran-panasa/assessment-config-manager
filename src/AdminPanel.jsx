@@ -107,9 +107,15 @@ export default function AdminPanel({ S, showToast }) {
     setSavingKey(user.id, false);
   };
 
+  const isAdminRole = (role) => role === "admin" || role === "super-admin";
+  const adminCount = activeUsers.filter(u => isAdminRole(u.role)).length;
+
   const handleRoleChange = async (user) => {
     const newRole = userRoleMap[user.id];
     if (!newRole || newRole === user.role) return;
+    if (isAdminRole(user.role) && !isAdminRole(newRole) && adminCount <= 1) {
+      showToast("Cannot demote the last admin — assign another admin first.", "error"); return;
+    }
     const roleName = roles.find(r => r.key === newRole)?.name || newRole;
     if (!window.confirm(`Change role for ${user.email} to "${roleName}"?`)) return;
     setSavingKey(user.id, true);
@@ -122,6 +128,9 @@ export default function AdminPanel({ S, showToast }) {
   };
 
   const handleRevoke = async (user) => {
+    if (isAdminRole(user.role) && adminCount <= 1) {
+      showToast("Cannot revoke the last admin — there would be no one to manage users.", "error"); return;
+    }
     if (!window.confirm(`Revoke access for ${user.email}? They will be moved back to Pending.`)) return;
     setSavingKey(user.id + "_revoke", true);
     try {
@@ -129,6 +138,16 @@ export default function AdminPanel({ S, showToast }) {
       showToast(`Access revoked for ${user.email}.`);
     } catch { showToast("Failed to revoke access.", "error"); }
     setSavingKey(user.id + "_revoke", false);
+  };
+
+  const handleDeleteUser = async (user) => {
+    if (!window.confirm(`Permanently delete ${user.email}? Their app profile will be removed. This cannot be undone.`)) return;
+    setSavingKey(user.id + "_delete", true);
+    try {
+      await deleteDoc(doc(db, "users", user.id));
+      showToast(`${user.email} deleted.`);
+    } catch { showToast("Failed to delete user.", "error"); }
+    setSavingKey(user.id + "_delete", false);
   };
 
   const handleTogglePage = async (roleId, pageKey, currentPages) => {
@@ -203,6 +222,7 @@ export default function AdminPanel({ S, showToast }) {
                         <th style={S.th}>Requested</th>
                         <th style={S.th}>Assign Role</th>
                         <th style={S.th}></th>
+                        <th style={S.th}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -228,6 +248,14 @@ export default function AdminPanel({ S, showToast }) {
                               onClick={() => handleApprove(user)}
                               style={{ ...S.btn("primary"), padding: "7px 18px", fontSize: 12, opacity: (!pendingRoleMap[user.id] || saving[user.id]) ? 0.5 : 1 }}>
                               {saving[user.id] ? "…" : "Approve"}
+                            </button>
+                          </td>
+                          <td style={S.td}>
+                            <button
+                              disabled={saving[user.id + "_delete"]}
+                              onClick={() => handleDeleteUser(user)}
+                              style={{ ...S.btn("danger"), padding: "7px 18px", fontSize: 12, opacity: saving[user.id + "_delete"] ? 0.35 : 1 }}>
+                              {saving[user.id + "_delete"] ? "…" : "Reject"}
                             </button>
                           </td>
                         </tr>
@@ -257,6 +285,7 @@ export default function AdminPanel({ S, showToast }) {
                         <th style={S.th}>Name</th>
                         <th style={S.th}>Current Role</th>
                         <th style={S.th}>Change Role</th>
+                        <th style={S.th}></th>
                         <th style={S.th}></th>
                         <th style={S.th}></th>
                       </tr>
@@ -303,6 +332,14 @@ export default function AdminPanel({ S, showToast }) {
                                 onClick={() => handleRevoke(user)}
                                 style={{ ...S.btn("danger"), padding: "7px 18px", fontSize: 12, opacity: (isSelf || saving[user.id + "_revoke"]) ? 0.35 : 1 }}>
                                 {saving[user.id + "_revoke"] ? "…" : "Revoke"}
+                              </button>
+                            </td>
+                            <td style={S.td}>
+                              <button
+                                disabled={isSelf || saving[user.id + "_delete"]}
+                                onClick={() => handleDeleteUser(user)}
+                                style={{ ...S.btn("danger"), padding: "7px 18px", fontSize: 12, opacity: (isSelf || saving[user.id + "_delete"]) ? 0.35 : 1, background: "#7f1d1d", borderColor: "#7f1d1d" }}>
+                                {saving[user.id + "_delete"] ? "…" : "Delete"}
                               </button>
                             </td>
                           </tr>

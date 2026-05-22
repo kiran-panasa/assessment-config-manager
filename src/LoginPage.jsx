@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { auth, db } from "./firebase";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { BOOTSTRAP_EMAIL } from "./AuthContext";
 
@@ -44,6 +44,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -72,7 +74,19 @@ export default function LoginPage() {
     }
   };
 
-  const switchMode = () => { setMode(m => m === "login" ? "signup" : "login"); setError(""); setShowPassword(false); };
+  const switchMode = () => { setMode(m => m === "login" ? "signup" : "login"); setError(""); setShowPassword(false); setResetMode(false); setResetSent(false); };
+
+  const handleReset = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) { setError("Enter your email address first."); return; }
+    setError(""); setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetSent(true);
+    } catch (err) {
+      setError(FIREBASE_ERRORS[err.code] || "Could not send reset email. Check the address and try again.");
+    } finally { setLoading(false); }
+  };
 
   const inputBase = {
     width: "100%", background: "#fff",
@@ -124,92 +138,147 @@ export default function LoginPage() {
           boxShadow: "0 4px 24px rgba(15,23,42,0.08), 0 1px 3px rgba(15,23,42,0.06)",
           border: "1px solid rgba(220,228,240,0.8)",
         }}>
-          <form onSubmit={handleSubmit}>
 
-            {mode === "signup" && (
-              <div style={{ marginBottom: 16 }}>
-                <label style={labelBase}>Full Name</label>
-                <input
-                  className="login-input"
-                  type="text" value={name} onChange={e => setName(e.target.value)}
-                  placeholder="Your full name"
-                  style={inputBase}
-                />
+          {/* ── Forgot password flow ── */}
+          {resetMode ? (
+            resetSent ? (
+              <div style={{ textAlign: "center", padding: "8px 0 16px" }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>📬</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", marginBottom: 8 }}>Check your inbox</div>
+                <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
+                  A password reset link was sent to <strong>{email}</strong>.
+                </div>
+                <button onClick={() => { setResetMode(false); setResetSent(false); }} style={{
+                  marginTop: 20, background: "none", border: "none", color: "#00b386",
+                  cursor: "pointer", fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13,
+                }}>Back to sign in</button>
               </div>
-            )}
+            ) : (
+              <form onSubmit={handleReset}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", marginBottom: 6 }}>Reset password</div>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 20, lineHeight: 1.5 }}>
+                  Enter your email and we'll send a reset link.
+                </div>
+                <div style={{ marginBottom: error ? 14 : 20 }}>
+                  <label style={labelBase}>Email address</label>
+                  <input className="login-input" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="you@example.com" required style={inputBase} />
+                </div>
+                {error && (
+                  <div style={{ marginBottom: 14, padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 13, color: "#dc2626", lineHeight: 1.5 }}>{error}</div>
+                )}
+                <button type="submit" disabled={loading} className="login-btn-primary" style={{
+                  width: "100%", padding: "12px", borderRadius: 10, fontFamily: "'Inter', sans-serif",
+                  fontWeight: 600, fontSize: 14, cursor: loading ? "not-allowed" : "pointer",
+                  background: "#00c896", color: "#fff", border: "none", opacity: loading ? 0.7 : 1,
+                }}>{loading ? "Sending…" : "Send reset link"}</button>
+                <div style={{ textAlign: "center", marginTop: 16 }}>
+                  <button type="button" onClick={() => { setResetMode(false); setError(""); }} style={{
+                    background: "none", border: "none", color: "#00b386", cursor: "pointer",
+                    fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13,
+                  }}>Back to sign in</button>
+                </div>
+              </form>
+            )
+          ) : (
+            <>
+              <form onSubmit={handleSubmit}>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelBase}>Email address</label>
-              <input
-                className="login-input"
-                type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com" required
-                style={inputBase}
-              />
-            </div>
+                {mode === "signup" && (
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={labelBase}>Full Name</label>
+                    <input
+                      className="login-input"
+                      type="text" value={name} onChange={e => setName(e.target.value)}
+                      placeholder="Your full name"
+                      style={inputBase}
+                    />
+                  </div>
+                )}
 
-            <div style={{ marginBottom: error ? 14 : 22 }}>
-              <label style={labelBase}>Password</label>
-              <div style={{ position: "relative" }}>
-                <input
-                  className="login-input"
-                  type={showPassword ? "text" : "password"}
-                  value={password} onChange={e => setPassword(e.target.value)}
-                  placeholder={mode === "signup" ? "At least 6 characters" : "Enter your password"}
-                  required
-                  style={{ ...inputBase, paddingRight: 44 }}
-                />
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelBase}>Email address</label>
+                  <input
+                    className="login-input"
+                    type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="you@example.com" required
+                    style={inputBase}
+                  />
+                </div>
+
+                <div style={{ marginBottom: error ? 14 : 22 }}>
+                  <label style={labelBase}>Password</label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      className="login-input"
+                      type={showPassword ? "text" : "password"}
+                      value={password} onChange={e => setPassword(e.target.value)}
+                      placeholder={mode === "signup" ? "At least 6 characters" : "Enter your password"}
+                      required
+                      style={{ ...inputBase, paddingRight: 44 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(v => !v)}
+                      style={{
+                        position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                        background: "none", border: "none", cursor: "pointer",
+                        color: "#94a3b8", padding: 2, display: "flex", alignItems: "center",
+                      }}
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      <EyeIcon open={showPassword} />
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div style={{
+                    marginBottom: 16, padding: "10px 14px",
+                    background: "#fef2f2", border: "1px solid #fecaca",
+                    borderRadius: 8, fontSize: 13, color: "#dc2626", lineHeight: 1.5,
+                  }}>
+                    {error}
+                  </div>
+                )}
+
                 <button
-                  type="button"
-                  onClick={() => setShowPassword(v => !v)}
+                  type="submit" disabled={loading}
+                  className="login-btn-primary"
                   style={{
-                    position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
-                    background: "none", border: "none", cursor: "pointer",
-                    color: "#94a3b8", padding: 2, display: "flex", alignItems: "center",
-                  }}
-                  title={showPassword ? "Hide password" : "Show password"}
-                >
-                  <EyeIcon open={showPassword} />
+                    width: "100%", padding: "12px", borderRadius: 10,
+                    fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14,
+                    cursor: loading ? "not-allowed" : "pointer",
+                    background: "#00c896", color: "#fff", border: "none",
+                    opacity: loading ? 0.7 : 1,
+                    transition: "background 0.15s, opacity 0.15s",
+                    letterSpacing: "0.01em",
+                  }}>
+                  {loading ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
+                </button>
+              </form>
+
+              {mode === "login" && (
+                <div style={{ textAlign: "center", marginTop: 14 }}>
+                  <button onClick={() => { setResetMode(true); setError(""); }} style={{
+                    background: "none", border: "none", color: "#94a3b8",
+                    cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 12,
+                  }}>Forgot password?</button>
+                </div>
+              )}
+
+              <div style={{ textAlign: "center", marginTop: 14, fontSize: 13, color: "#94a3b8" }}>
+                {mode === "login" ? "Don't have an account? " : "Already have an account? "}
+                <button onClick={switchMode} className="login-switch" style={{
+                  background: "none", border: "none", color: "#00b386",
+                  cursor: "pointer", fontFamily: "'Inter', sans-serif",
+                  fontWeight: 600, fontSize: 13, padding: 0,
+                }}>
+                  {mode === "login" ? "Sign up" : "Sign in"}
                 </button>
               </div>
-            </div>
-
-            {error && (
-              <div style={{
-                marginBottom: 16, padding: "10px 14px",
-                background: "#fef2f2", border: "1px solid #fecaca",
-                borderRadius: 8, fontSize: 13, color: "#dc2626", lineHeight: 1.5,
-              }}>
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit" disabled={loading}
-              className="login-btn-primary"
-              style={{
-                width: "100%", padding: "12px", borderRadius: 10,
-                fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14,
-                cursor: loading ? "not-allowed" : "pointer",
-                background: "#00c896", color: "#fff", border: "none",
-                opacity: loading ? 0.7 : 1,
-                transition: "background 0.15s, opacity 0.15s",
-                letterSpacing: "0.01em",
-              }}>
-              {loading ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
-            </button>
-          </form>
-
-          <div style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "#94a3b8" }}>
-            {mode === "login" ? "Don't have an account? " : "Already have an account? "}
-            <button onClick={switchMode} className="login-switch" style={{
-              background: "none", border: "none", color: "#00b386",
-              cursor: "pointer", fontFamily: "'Inter', sans-serif",
-              fontWeight: 600, fontSize: 13, padding: 0,
-            }}>
-              {mode === "login" ? "Sign up" : "Sign in"}
-            </button>
-          </div>
+            </>
+          )}
         </div>
 
         <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: "#cbd5e1" }}>
