@@ -130,7 +130,7 @@ app.get("/fetch-bookings", requireSecret, async (req, res) => {
   const rawConn = process.env.CONTEST_BOOKINGS_DB_URL;
   if (!rawConn) return res.status(500).json({ error: "CONTEST_BOOKINGS_DB_URL env var not set on server" });
 
-  const table   = process.env.REPLIT_TABLE    || "bookings";
+  const table   = process.env.REPLIT_TABLE    || "contest_registrations";
   const dateCol = process.env.REPLIT_DATE_COL || "contest_date";
 
   // Strip query string — Neon's SSL params can be malformed; apply SSL explicitly instead
