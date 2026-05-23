@@ -130,16 +130,30 @@ app.get("/fetch-bookings", requireSecret, async (req, res) => {
   const rawConn = process.env.CONTEST_BOOKINGS_DB_URL;
   if (!rawConn) return res.status(500).json({ error: "CONTEST_BOOKINGS_DB_URL env var not set on server" });
 
-  const table   = process.env.REPLIT_TABLE    || "contest_registrations";
-  const dateCol = process.env.REPLIT_DATE_COL || "contest_date";
-
   // Strip query string — Neon's SSL params can be malformed; apply SSL explicitly instead
   const connStr = rawConn.replace(/\?.*$/, "");
   const client = new Client({ connectionString: connStr, ssl: { rejectUnauthorized: false } });
   try {
     await client.connect();
     const result = await client.query(
-      `SELECT * FROM ${table} WHERE ${dateCol}::date = $1`,
+      `SELECT
+         cr.booking_id,
+         cr.student_uid,
+         cr.skill,
+         cr.skill_level::text AS skill_level,
+         cr.contest_link,
+         cr.classroom_details,
+         cr.registered_at,
+         cs.campus,
+         cs.contest_date,
+         cs.time_slot
+       FROM contest_registrations cr
+       JOIN contest_slots cs ON cr.contest_slot_id = cs.id
+       WHERE cs.contest_date = $1
+         AND cr.is_cancelled = false
+         AND cs.is_active    = true
+         AND cs.is_deleted   = false
+       ORDER BY cs.time_slot, cr.booking_id`,
       [date],
     );
     res.json({

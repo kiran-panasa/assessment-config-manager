@@ -165,7 +165,7 @@ function mapDbRow(r) {
     contestDate, timeSlot, skill, skillLevel,
     contestLink:      g("contestlink", "contest link", "link"),
     classroomDetails: g("classroomdetails", "classroom details", "classroom"),
-    bookedAt:         g("bookedat", "booked at", "createdat", "created at"),
+    bookedAt:         g("bookedat", "booked at", "registeredat", "registered at", "createdat", "created at"),
     attendance:       g("attendance"),
     status:           g("status"),
     sessionKey: buildSessionKey(skill, skillLevel, contestDate, timeSlot),
