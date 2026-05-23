@@ -314,6 +314,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
 
   const [dbDate, setDbDate] = useState("");
   const [dbFetching, setDbFetching] = useState(false);
+  const [dbFetchResult, setDbFetchResult] = useState(null); // { count, date }
   const [serverCreds, setServerCreds] = useState({ serverUrl: "", serverSecret: "" });
 
   useEffect(() => {
@@ -421,10 +422,21 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
     setDupChoice(result.dupRows.length === 0 ? "skip" : null);
   };
 
+  const downloadCSV = (rows, filename) => {
+    const headers = ["Booking ID","Student UID","Student Name","NIAT ID","Campus","Slot Centre","Batch","Section","Contest Date","Time Slot","Skill","Skill Level","Contest Link","Classroom Details","Booked At","Attendance","Status"];
+    const fields  = ["bookingId","studentUid","studentName","niatId","campus","slotCentre","batch","section","contestDate","timeSlot","skill","skillLevel","contestLink","classroomDetails","bookedAt","attendance","status"];
+    const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = [headers.map(esc).join(","), ...rows.map(r => fields.map(f => esc(r[f])).join(","))];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleFetchFromDB = async () => {
     if (!dbDate) { showToast("Select a date first.", "error"); return; }
     setDbFetching(true);
-    setCsvData(null); setDupChoice(null);
+    setCsvData(null); setDupChoice(null); setDbFetchResult(null);
     if (fileRef.current) fileRef.current.value = "";
     try {
       const headers = { ...(serverCreds.serverSecret ? { "x-server-token": serverCreds.serverSecret } : {}) };
@@ -441,7 +453,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
       const result = processBookingRows(rows, existingBids, examSessions, assessments, parseInt(bufferTime) || 0);
       setCsvData({ ...result, source: "db", dbDate });
       setDupChoice(result.dupRows.length === 0 ? "skip" : null);
-      showToast(`Fetched ${data.count} bookings from DB.`);
+      setDbFetchResult({ count: data.count, date: dbDate, rows });
     } catch {
       showToast("Failed to reach server. Check Server URL in Credentials.", "error");
     } finally {
@@ -595,7 +607,7 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                 <div>
                   <label style={S.label}>Contest Date</label>
                   <input type="date" style={{ ...S.input, width: 200 }} value={dbDate}
-                    onChange={e => { setDbDate(e.target.value); setCsvData(null); setDupChoice(null); }} />
+                    onChange={e => { setDbDate(e.target.value); setCsvData(null); setDupChoice(null); setDbFetchResult(null); }} />
                 </div>
                 <button
                   disabled={!dbDate || dbFetching || !serverCreds.serverUrl}
@@ -603,7 +615,19 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                   style={{ ...S.btn("primary"), opacity: (!dbDate || dbFetching || !serverCreds.serverUrl) ? 0.5 : 1 }}>
                   {dbFetching ? "Fetching…" : "Fetch from DB"}
                 </button>
+                {dbFetchResult && (
+                  <button
+                    onClick={() => downloadCSV(dbFetchResult.rows, `bookings-db-${dbFetchResult.date}.csv`)}
+                    style={{ ...S.btn("secondary"), display: "flex", alignItems: "center", gap: 6 }}>
+                    ↓ Download CSV
+                  </button>
+                )}
               </div>
+              {dbFetchResult && (
+                <div style={{ marginTop: 12, padding: "10px 14px", background: "#f0fdf9", border: "1px solid #6ee7b7", borderRadius: 8, fontSize: 13, color: "#065f46", fontFamily: "'Inter', sans-serif" }}>
+                  ✓ <strong>{dbFetchResult.count}</strong> bookings fetched from DB for <strong>{dbFetchResult.date}</strong>
+                </div>
+              )}
               {!serverCreds.serverUrl && (
                 <div style={{ marginTop: 10, fontSize: 12, color: "#94a3b8" }}>
                   Server URL not configured — set it in Create Assessments → Credentials.
