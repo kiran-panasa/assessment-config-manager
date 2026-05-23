@@ -17,6 +17,8 @@ import express from "express";
 import cors from "cors";
 import { chromium } from "playwright";
 import { existsSync, readFileSync, writeFileSync } from "fs";
+import pg from "pg";
+const { Client } = pg;
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, writeBatch, query, where } from "firebase/firestore";
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
@@ -117,6 +119,37 @@ app.post("/cancel", requireSecret, (_req, res) => {
     broadcast("warn", "Cancel requested — stopping after current step…");
   }
   res.json({ ok: true });
+});
+
+// ── Replit DB: fetch bookings by date ─────────────────────────────────────────
+
+app.get("/fetch-bookings", requireSecret, async (req, res) => {
+  const { date } = req.query;
+  if (!date) return res.status(400).json({ error: "date query param required (YYYY-MM-DD)" });
+
+  const connStr = process.env.REPLIT_DB_URL;
+  if (!connStr) return res.status(500).json({ error: "REPLIT_DB_URL env var not set on server" });
+
+  const table  = process.env.REPLIT_TABLE    || "bookings";
+  const dateCol = process.env.REPLIT_DATE_COL || "contest_date";
+
+  const client = new Client({ connectionString: connStr, ssl: { rejectUnauthorized: false } });
+  try {
+    await client.connect();
+    const result = await client.query(
+      `SELECT * FROM ${table} WHERE ${dateCol}::date = $1`,
+      [date],
+    );
+    res.json({
+      rows: result.rows,
+      columns: result.fields.map(f => f.name),
+      count: result.rowCount,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    await client.end().catch(() => {});
+  }
 });
 
 app.get("/progress", (req, res) => {

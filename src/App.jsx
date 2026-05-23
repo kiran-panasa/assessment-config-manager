@@ -108,6 +108,70 @@ function parseSessionSkillLevel(title) {
 const T1_FILTER_INIT = { contestDate: "All", skill: "All", skillLevel: "All", timeSlot: "All", campus: "All", batch: "All", inviteStatus: "All" };
 const T2_FILTER_INIT = { dateOfAssessment: "All", skill: "All", level: "All", startTimeSlot: "All", publishStatus: "All" };
 
+function processBookingRows(rows, existingBids, existingSessions, assessments, bufMins) {
+  const existingSet = new Set(existingBids);
+  const dupRows = rows.filter(r => existingSet.has(r.bookingId));
+  const newRows = rows.filter(r => !existingSet.has(r.bookingId));
+
+  const existingSessionMap = new Map();
+  existingSessions.forEach(s => { if (s.sessionKey) existingSessionMap.set(s.sessionKey, s); });
+
+  const seenKeys = new Set();
+  const newSessions = [], reusedSessions = [], warnSessions = [];
+
+  rows.forEach(row => {
+    const key = row.sessionKey;
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    if (existingSessionMap.has(key)) { reusedSessions.push(existingSessionMap.get(key)); return; }
+    const match = assessments.find(a => a.skill === row.skill && a.level === `L${row.skillLevel}`);
+    const duration = parseInt(match?.duration) || 0;
+    const hasMissingConfig = !match || !match.duration;
+    const startMins = timeToMins(row.timeSlot);
+    const session = {
+      assessmentTitle: `${row.skill} - L${row.skillLevel}`,
+      dateOfAssessment: row.contestDate,
+      startTimeSlot: minsToTime(startMins),
+      endTimeSlot: minsToTime(startMins + duration + bufMins),
+      uniqueExamId: buildExamId(row.skill, row.skillLevel, row.contestDate, row.timeSlot),
+      exitPin: genPin(),
+      skill: row.skill, level: row.skillLevel,
+      sessionKey: key, hasMissingConfig,
+    };
+    newSessions.push(session);
+    if (hasMissingConfig) warnSessions.push(session);
+  });
+
+  return { rows, newRows, dupRows, newSessions, reusedSessions, warnSessions };
+}
+
+function mapDbRow(r) {
+  const lc = {};
+  Object.entries(r).forEach(([k, v]) => { lc[k.toLowerCase().replace(/_/g, "")] = String(v ?? "").trim(); });
+  const g = (...keys) => { for (const k of keys) { const v = lc[k.replace(/[\s_]/g, "").toLowerCase()]; if (v !== undefined && v !== "") return v; } return ""; };
+  const skill = g("skill");
+  const skillLevel = g("skilllevel", "skill level", "level");
+  const contestDate = toISODate(g("contestdate", "contest date", "date"));
+  const timeSlot = g("timeslot", "time slot", "slot");
+  return {
+    bookingId:        g("bookingid", "booking id", "id"),
+    studentUid:       g("studentuid", "student uid", "uid", "userid", "user id"),
+    studentName:      g("studentname", "student name", "name"),
+    niatId:           g("niatid", "niat id", "niat"),
+    campus:           g("campus"),
+    slotCentre:       g("slotcentre", "slot centre", "slotcenter", "slot center", "centre", "center"),
+    batch:            g("batch"),
+    section:          g("section"),
+    contestDate, timeSlot, skill, skillLevel,
+    contestLink:      g("contestlink", "contest link", "link"),
+    classroomDetails: g("classroomdetails", "classroom details", "classroom"),
+    bookedAt:         g("bookedat", "booked at", "createdat", "created at"),
+    attendance:       g("attendance"),
+    status:           g("status"),
+    sessionKey: buildSessionKey(skill, skillLevel, contestDate, timeSlot),
+  };
+}
+
 function parseBookingCSV(text, existingBids, existingSessions, assessments, bufMins) {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split("\n");
   if (lines.length < 2) return { error: "CSV file is empty." };
@@ -150,41 +214,7 @@ function parseBookingCSV(text, existingBids, existingSessions, assessments, bufM
   }
 
   if (rows.length === 0) return { error: "No data rows found in CSV." };
-
-  const existingSet = new Set(existingBids);
-  const dupRows = rows.filter(r => existingSet.has(r.bookingId));
-  const newRows = rows.filter(r => !existingSet.has(r.bookingId));
-
-  const existingSessionMap = new Map();
-  existingSessions.forEach(s => { if (s.sessionKey) existingSessionMap.set(s.sessionKey, s); });
-
-  const seenKeys = new Set();
-  const newSessions = [], reusedSessions = [], warnSessions = [];
-
-  rows.forEach(row => {
-    const key = row.sessionKey;
-    if (seenKeys.has(key)) return;
-    seenKeys.add(key);
-    if (existingSessionMap.has(key)) { reusedSessions.push(existingSessionMap.get(key)); return; }
-    const match = assessments.find(a => a.skill === row.skill && a.level === `L${row.skillLevel}`);
-    const duration = parseInt(match?.duration) || 0;
-    const hasMissingConfig = !match || !match.duration;
-    const startMins = timeToMins(row.timeSlot);
-    const session = {
-      assessmentTitle: `${row.skill} - L${row.skillLevel}`,
-      dateOfAssessment: row.contestDate,
-      startTimeSlot: minsToTime(startMins),
-      endTimeSlot: minsToTime(startMins + duration + bufMins),
-      uniqueExamId: buildExamId(row.skill, row.skillLevel, row.contestDate, row.timeSlot),
-      exitPin: genPin(),
-      skill: row.skill, level: row.skillLevel,
-      sessionKey: key, hasMissingConfig,
-    };
-    newSessions.push(session);
-    if (hasMissingConfig) warnSessions.push(session);
-  });
-
-  return { rows, newRows, dupRows, newSessions, reusedSessions, warnSessions };
+  return processBookingRows(rows, existingBids, existingSessions, assessments, bufMins);
 }
 
 // ── sub-components ────────────────────────────────────────────────────────────
@@ -282,6 +312,19 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
   const [processing, setProcessing] = useState(false);
   const fileRef = useRef(null);
 
+  const [dbDate, setDbDate] = useState("");
+  const [dbFetching, setDbFetching] = useState(false);
+  const [serverCreds, setServerCreds] = useState({ serverUrl: "", serverSecret: "" });
+
+  useEffect(() => {
+    getDoc(doc(db, "settings", "automation")).then(snap => {
+      if (snap.exists()) {
+        const d = snap.data();
+        setServerCreds({ serverUrl: d.serverUrl || "", serverSecret: d.serverSecret || "" });
+      }
+    }).catch(() => {});
+  }, []);
+
   const [t1Filters, setT1Filters] = useState(T1_FILTER_INIT);
   const [t2Filters, setT2Filters] = useState(T2_FILTER_INIT);
   const [t3Date, setT3Date] = useState("All");
@@ -376,6 +419,34 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
     if (result.error) { showToast(result.error, "error"); setCsvData(null); return; }
     setCsvData(result);
     setDupChoice(result.dupRows.length === 0 ? "skip" : null);
+  };
+
+  const handleFetchFromDB = async () => {
+    if (!dbDate) { showToast("Select a date first.", "error"); return; }
+    setDbFetching(true);
+    setCsvData(null); setDupChoice(null);
+    if (fileRef.current) fileRef.current.value = "";
+    try {
+      const headers = { ...(serverCreds.serverSecret ? { "x-server-token": serverCreds.serverSecret } : {}) };
+      const res = await fetch(`${serverCreds.serverUrl}/fetch-bookings?date=${dbDate}`, { headers });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || "Fetch failed.", "error"); return; }
+      if (!data.rows || data.rows.length === 0) { showToast(`No bookings found for ${dbDate}.`, "error"); return; }
+      const rows = data.rows.map(mapDbRow);
+      const missing = rows.filter(r => !r.bookingId || !r.skill || !r.skillLevel || !r.contestDate);
+      if (missing.length === rows.length) {
+        showToast(`Column mapping failed. DB columns found: ${data.columns?.join(", ")}`, "error");
+        return;
+      }
+      const result = processBookingRows(rows, existingBids, examSessions, assessments, parseInt(bufferTime) || 0);
+      setCsvData({ ...result, source: "db", dbDate });
+      setDupChoice(result.dupRows.length === 0 ? "skip" : null);
+      showToast(`Fetched ${data.count} bookings from DB.`);
+    } catch {
+      showToast("Failed to reach server. Check Server URL in Credentials.", "error");
+    } finally {
+      setDbFetching(false);
+    }
   };
 
   const handleFile = (e) => {
@@ -509,8 +580,42 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
         {/* ── UPLOAD ── */}
         {bookTab === "upload" && (
           <>
-            <div style={S.sectionTitle}>Upload Booking CSV</div>
+            <div style={S.sectionTitle}>Add Bookings</div>
             <div style={S.sectionSub}>Generates Slot Bookings (Table 1), Unique Assessments (Table 2), and User Mapping (Table 3).</div>
+
+            {/* ── Fetch from Replit DB ── */}
+            <div style={S.card}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 14, color: "#0f172a", marginBottom: 4 }}>
+                Fetch from Replit DB
+              </div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>
+                Pull bookings directly from the Replit Postgres database for a specific contest date.
+              </div>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div>
+                  <label style={S.label}>Contest Date</label>
+                  <input type="date" style={{ ...S.input, width: 200 }} value={dbDate}
+                    onChange={e => { setDbDate(e.target.value); setCsvData(null); setDupChoice(null); }} />
+                </div>
+                <button
+                  disabled={!dbDate || dbFetching || !serverCreds.serverUrl}
+                  onClick={handleFetchFromDB}
+                  style={{ ...S.btn("primary"), opacity: (!dbDate || dbFetching || !serverCreds.serverUrl) ? 0.5 : 1 }}>
+                  {dbFetching ? "Fetching…" : "Fetch from DB"}
+                </button>
+              </div>
+              {!serverCreds.serverUrl && (
+                <div style={{ marginTop: 10, fontSize: 12, color: "#94a3b8" }}>
+                  Server URL not configured — set it in Create Assessments → Credentials.
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0" }}>
+              <div style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
+              <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Inter', sans-serif", fontWeight: 600, letterSpacing: "0.05em" }}>OR UPLOAD CSV</span>
+              <div style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
+            </div>
 
             <div style={S.card}>
               <div style={S.grid2}>
