@@ -127,12 +127,14 @@ app.get("/fetch-bookings", requireSecret, async (req, res) => {
   const { date } = req.query;
   if (!date) return res.status(400).json({ error: "date query param required (YYYY-MM-DD)" });
 
-  const connStr = process.env.REPLIT_DB_URL;
-  if (!connStr) return res.status(500).json({ error: "REPLIT_DB_URL env var not set on server" });
+  const rawConn = process.env.CONTEST_BOOKINGS_DB_URL;
+  if (!rawConn) return res.status(500).json({ error: "CONTEST_BOOKINGS_DB_URL env var not set on server" });
 
-  const table  = process.env.REPLIT_TABLE    || "bookings";
+  const table   = process.env.REPLIT_TABLE    || "bookings";
   const dateCol = process.env.REPLIT_DATE_COL || "contest_date";
 
+  // Strip query string — Neon's SSL params can be malformed; apply SSL explicitly instead
+  const connStr = rawConn.replace(/\?.*$/, "");
   const client = new Client({ connectionString: connStr, ssl: { rejectUnauthorized: false } });
   try {
     await client.connect();
