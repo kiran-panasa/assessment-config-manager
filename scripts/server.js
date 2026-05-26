@@ -544,8 +544,8 @@ async function publishOneSession(page, session, assessments) {
     throw new Error(`Session invalid — redirected to login when opening view URL. Re-run Publish with a fresh OTP.`);
   }
 
-  // ── 2. Clone button — aria-label selector (button text is inside a <span>) ──
-  const cloneLocator = page.locator('[aria-label="clone-assessment"]').first();
+  // ── 2. Clone button — same selector as topin-cloner (proven working)
+  const cloneLocator = page.locator('button, a, [role="button"]').filter({ hasText: /clone/i }).first();
   let cloneFound = false;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -707,11 +707,23 @@ async function runPublish(mobile, otp, date, loginUrl) {
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
   });
-  // recordHar tells Playwright's browser protocol to capture every request/response
-  // into a standard HAR file. context.close() flushes and writes it.
+
+  // Match topin-cloner pattern: check session validity first with a temp context,
+  // then create the real context either with valid saved state OR completely clean
+  // (never load stale state into the same context that does OTP login — old tokens
+  // in localStorage corrupt the fresh session and cause view-assessment to redirect)
+  let sessionRestored = false;
+  if (existsSync(COOKIES_FILE)) {
+    const checkCtx = await browser.newContext({ storageState: COOKIES_FILE });
+    const checkPage = await checkCtx.newPage();
+    sessionRestored = await tryRestoreSession(checkCtx, checkPage);
+    await checkCtx.close();
+  }
+
+  // Real context: loaded with valid session OR completely fresh for OTP login
   const context = await browser.newContext({
     recordHar: { path: HAR_FILE },
-    ...(existsSync(COOKIES_FILE) ? { storageState: COOKIES_FILE } : {}),
+    ...(sessionRestored ? { storageState: COOKIES_FILE } : {}),
   });
   const page = await context.newPage();
   page.setDefaultTimeout(30000);
@@ -719,8 +731,7 @@ async function runPublish(mobile, otp, date, loginUrl) {
   let passed = 0, failed = 0;
 
   try {
-    const restored = await tryRestoreSession(context, page);
-    if (!restored) {
+    if (!sessionRestored) {
       await loginToTopin(page, mobile, otp, loginUrl);
       await saveSession(context);
     }
