@@ -396,7 +396,9 @@ async function loginToTopin(page, mobile, otp, loginUrl) {
   // Wait for redirect to config.topin.tech — confirms login succeeded
   broadcast("info", "  Waiting for login redirect…");
   await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 });
-  await page.waitForLoadState("domcontentloaded", { timeout: 15000 });
+  // Wait for the SPA to finish its auth initialization (token storage, session API calls)
+  // before we navigate away or save the session state
+  await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   broadcast("success", "Logged in to Topin");
 }
 
@@ -536,12 +538,11 @@ async function publishOneSession(page, session, assessments) {
   const viewUrl = config.url.replace("/edit-assessment/", "/view-assessment/");
   broadcast("info", `  Opening view URL: ${viewUrl.slice(0, 100)}`);
   await page.goto(viewUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-  try {
-    await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 });
-  } catch {
-    broadcast("info", `  Auth redirect incomplete — still on ${page.url()}`);
+  await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  // If Topin redirected us to the login page, the session is invalid — fail fast
+  if (page.url().includes("accounts.ccbp.in")) {
+    throw new Error(`Session invalid — redirected to login when opening view URL. Re-run Publish with a fresh OTP.`);
   }
-  await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
 
   // ── 2. Clone button — aria-label selector (button text is inside a <span>) ──
   const cloneLocator = page.locator('[aria-label="clone-assessment"]').first();
@@ -555,8 +556,10 @@ async function publishOneSession(page, session, assessments) {
       if (attempt === 1) {
         broadcast("info", "  Clone button not ready, re-navigating…");
         await page.goto(viewUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-        try { await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 }); } catch { /* proceed */ }
-        await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
+        await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+        if (page.url().includes("accounts.ccbp.in")) {
+          throw new Error(`Session invalid — redirected to login on re-navigation. Re-run Publish with a fresh OTP.`);
+        }
       }
     }
   }
