@@ -305,6 +305,26 @@ async function trySelector(page, selectors, timeout = 8000) {
   return null;
 }
 
+// Waits until the page DOM stops changing for ~1 second — ensures the React app
+// has fully rendered the authenticated dashboard (postMessage handshake complete,
+// tokens stored in localStorage) before we navigate away.
+async function waitForPageSettled(page, timeout = 20000) {
+  const end = Date.now() + timeout;
+  let prev = -1;
+  let stableCount = 0;
+  while (Date.now() < end) {
+    const curr = await page.evaluate(() => document.body?.innerHTML?.length ?? 0).catch(() => 0);
+    if (curr > 0 && curr === prev) {
+      stableCount++;
+      if (stableCount >= 2) return;
+    } else {
+      stableCount = 0;
+    }
+    prev = curr;
+    await page.waitForTimeout(500);
+  }
+}
+
 async function loginToTopin(page, mobile, otp, loginUrl) {
   broadcast("info", "Navigating to Topin login…");
   await page.goto(loginUrl, { waitUntil: "load", timeout: 30000 });
@@ -396,9 +416,12 @@ async function loginToTopin(page, mobile, otp, loginUrl) {
   // Wait for redirect to config.topin.tech — confirms login succeeded
   broadcast("info", "  Waiting for login redirect…");
   await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 });
-  // Wait for the SPA to finish its auth initialization (token storage, session API calls)
-  // before we navigate away or save the session state
-  await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  // Wait for DOM stability: the React SPA must process the postMessage from the
+  // login iframe (storing auth tokens in localStorage) and re-render the
+  // authenticated dashboard before we navigate away. networkidle fires too early
+  // (before the postMessage handshake completes); DOM stability fires after.
+  broadcast("info", "  Waiting for Topin dashboard to settle…");
+  await waitForPageSettled(page, 20000);
   broadcast("success", "Logged in to Topin");
 }
 
