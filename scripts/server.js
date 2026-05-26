@@ -705,7 +705,13 @@ async function runPublish(mobile, otp, date, loginUrl) {
 
   const browser = await chromium.launch({
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--disable-blink-features=AutomationControlled",
+    ],
   });
 
   // Match topin-cloner pattern: check session validity first with a temp context,
@@ -714,18 +720,29 @@ async function runPublish(mobile, otp, date, loginUrl) {
   // in localStorage corrupt the fresh session and cause view-assessment to redirect)
   let sessionRestored = false;
   if (existsSync(COOKIES_FILE)) {
-    const checkCtx = await browser.newContext({ storageState: COOKIES_FILE });
+    const checkCtx = await browser.newContext({
+      storageState: COOKIES_FILE,
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    });
     const checkPage = await checkCtx.newPage();
+    await checkPage.addInitScript(() => { Object.defineProperty(navigator, "webdriver", { get: () => undefined }); });
     sessionRestored = await tryRestoreSession(checkCtx, checkPage);
     await checkCtx.close();
   }
 
   // Real context: loaded with valid session OR completely fresh for OTP login
+  // Use a realistic user agent — Topin detects default headless Chromium UA and
+  // blocks protected routes (like /view-assessment/*) while leaving the root accessible
   const context = await browser.newContext({
     recordHar: { path: HAR_FILE },
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     ...(sessionRestored ? { storageState: COOKIES_FILE } : {}),
   });
   const page = await context.newPage();
+  // Hide the webdriver flag that headless Chromium exposes — sites use this to detect automation
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
   page.setDefaultTimeout(30000);
 
   let passed = 0, failed = 0;
