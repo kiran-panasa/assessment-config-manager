@@ -16,7 +16,7 @@
 import express from "express";
 import cors from "cors";
 import { chromium } from "playwright";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, appendFileSync } from "fs";
 import pg from "pg";
 const { Client } = pg;
 import { initializeApp } from "firebase/app";
@@ -68,22 +68,71 @@ function broadcast(type, message, extra = {}) {
 // Saves Topin browser cookies after a successful OTP login so subsequent runs
 // can skip the OTP flow entirely (saves ~1–2 min per publish run).
 
-const COOKIES_FILE = "./topin-session.json";
+const COOKIES_FILE     = "./topin-session.json";
+const NETWORK_LOG_FILE = "./topin-network-log.json";
+const HAR_FILE         = "./topin-network.har";
+
+// Uses Playwright's built-in HAR recording (recordHar on newContext).
+// The HAR file is written when context.close() is called in runPublish,
+// then parsed into a clean JSON format for the /network-log endpoint.
+
+function parseHarToLog() {
+  if (!existsSync(HAR_FILE)) {
+    broadcast("warn", "[INTERCEPTOR] HAR file not found — nothing was captured.");
+    return;
+  }
+  try {
+    const har = JSON.parse(readFileSync(HAR_FILE, "utf8"));
+    const SKIP = /\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|otf|ico|map|webp)(\?|$)/i;
+    const entries = (har.log?.entries || [])
+      .filter(e => !SKIP.test(e.request.url))
+      .map(e => {
+        let reqBody = null;
+        if (e.request.postData?.text) {
+          try { reqBody = JSON.parse(e.request.postData.text); }
+          catch { reqBody = e.request.postData.text; }
+        }
+        let resBody = null;
+        const rawText = e.response.content?.text;
+        if (rawText) {
+          const enc = e.response.content?.encoding;
+          const decoded = enc === "base64"
+            ? Buffer.from(rawText, "base64").toString("utf8")
+            : rawText;
+          try { resBody = JSON.parse(decoded); }
+          catch { resBody = decoded.slice(0, 2000); }
+        }
+        return {
+          timestamp:   e.startedDateTime,
+          method:      e.request.method,
+          url:         e.request.url,
+          status:      e.response.status,
+          mimeType:    e.response.content?.mimeType || null,
+          requestBody: reqBody,
+          responseBody: resBody,
+        };
+      });
+    writeFileSync(NETWORK_LOG_FILE, JSON.stringify(entries, null, 2));
+    broadcast("info", `[INTERCEPTOR] ${entries.length} API call(s) captured → topin-network-log.json`);
+    console.log(`[INTERCEPTOR] Saved ${entries.length} entries from HAR`);
+  } catch (err) {
+    broadcast("error", `[INTERCEPTOR] HAR parse failed: ${err.message}`);
+    console.error("[INTERCEPTOR] HAR parse error:", err);
+  }
+}
 
 async function saveSession(context) {
   try {
-    const cookies = await context.cookies();
-    writeFileSync(COOKIES_FILE, JSON.stringify(cookies));
-    broadcast("info", "[SESSION] Cookies saved — next run will skip OTP login.");
+    await context.storageState({ path: COOKIES_FILE });
+    broadcast("info", "[SESSION] Session saved — next run will skip OTP login.");
   } catch { /* non-fatal */ }
 }
 
 async function tryRestoreSession(context, page) {
   if (!existsSync(COOKIES_FILE)) return false;
   try {
-    const cookies = JSON.parse(readFileSync(COOKIES_FILE, "utf8"));
-    await context.addCookies(cookies);
-    // Verify the session is still valid by navigating to the app
+    // storageState is passed at context creation time; here we verify the saved
+    // state is still valid by navigating to Topin and checking the URL
     await page.goto("https://config.topin.tech", { waitUntil: "domcontentloaded", timeout: 20000 });
     const url = page.url();
     const valid = url.includes("config.topin.tech") && !url.includes("accounts.ccbp.in");
@@ -111,8 +160,28 @@ function requireSecret(req, res, next) {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
-app.get("/status", (_req, res) => res.json({ jobRunning }));
+app.get("/health",      (_req, res) => res.json({ status: "ok" }));
+app.get("/status",      (_req, res) => res.json({ jobRunning }));
+app.get("/network-log", requireSecret, (_req, res) => {
+  if (!existsSync(NETWORK_LOG_FILE))
+    return res.status(404).json({ error: "No log yet — run a publish first." });
+  try {
+    const entries = JSON.parse(readFileSync(NETWORK_LOG_FILE, "utf8"));
+    // Return a summary by default; pass ?full=1 for the raw log
+    if (res.req.query.full === "1") return res.json({ count: entries.length, entries });
+    const summary = entries.map(e => ({
+      phase:  e.phase,
+      method: e.method,
+      url:    e.url,
+      status: e.status,
+      reqBody:  e.requestBody  ? "(present)" : null,
+      resBody:  e.responseBody ? "(present)" : null,
+    }));
+    res.json({ count: entries.length, summary });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.post("/cancel", requireSecret, (_req, res) => {
   if (jobRunning) {
     cancelRequested = true;
@@ -462,9 +531,11 @@ async function publishOneSession(page, session, assessments) {
   );
   if (!config?.url) throw new Error(`No config URL for ${session.skill} - L${session.level}`);
 
-  // ── 1. Open config URL — wait for auth redirect to settle ────────────────
-  broadcast("info", "  Opening config URL…");
-  await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+  // ── 1. Open config URL in VIEW mode — Clone button only exists there ────
+  // Convert /edit-assessment/ → /view-assessment/ (Clone is absent on edit page)
+  const viewUrl = config.url.replace("/edit-assessment/", "/view-assessment/");
+  broadcast("info", `  Opening view URL: ${viewUrl.slice(0, 100)}`);
+  await page.goto(viewUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
   try {
     await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 });
   } catch {
@@ -484,7 +555,7 @@ async function publishOneSession(page, session, assessments) {
     } catch {
       if (attempt === 1) {
         broadcast("info", "  Clone button not ready, re-navigating…");
-        await page.goto(config.url, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+        await page.goto(viewUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
         try { await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 }); } catch { /* proceed */ }
         await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
       }
@@ -617,13 +688,19 @@ async function runPublish(mobile, otp, date, loginUrl) {
   }
 
   broadcast("info", `Found ${sessions.length} unpublished session(s)${date ? ` for ${date}` : ""}`);
+  broadcast("info", "[INTERCEPTOR] HAR recording enabled — all network calls will be captured.");
 
   const browser = await chromium.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
   });
-  const context = await browser.newContext();
-  const page    = await context.newPage();
+  // recordHar tells Playwright's browser protocol to capture every request/response
+  // into a standard HAR file. context.close() flushes and writes it.
+  const context = await browser.newContext({
+    recordHar: { path: HAR_FILE },
+    ...(existsSync(COOKIES_FILE) ? { storageState: COOKIES_FILE } : {}),
+  });
+  const page = await context.newPage();
   page.setDefaultTimeout(30000);
 
   let passed = 0, failed = 0;
@@ -645,6 +722,7 @@ async function runPublish(mobile, otp, date, loginUrl) {
 
       try {
         const { assessmentId, assessmentLink } = await publishOneSession(page, session, assessments);
+
         await updateDoc(doc(db, "examSessions", session.id), {
           topinAssessmentId: assessmentId,
           assessmentLink,
@@ -665,7 +743,10 @@ async function runPublish(mobile, otp, date, loginUrl) {
       await page.waitForTimeout(200);
     }
   } finally {
-    await browser.close();
+    // context.close() MUST come before browser.close() — it flushes the HAR file
+    await context.close().catch(() => {});
+    await browser.close().catch(() => {});
+    parseHarToLog();
   }
 
   await logJob("publish", startMs, { passed, failed });
