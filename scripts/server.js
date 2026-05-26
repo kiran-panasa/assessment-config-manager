@@ -246,18 +246,15 @@ app.get("/progress", (req, res) => {
   req.on("close", () => clients.delete(res));
 });
 
-const DEFAULT_TOPIN_LOGIN_URL =
-  "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp&WINDOW_MODE=IN_APP";
-
 app.post("/publish", requireSecret, async (req, res) => {
   if (jobRunning) return res.status(409).json({ error: "A job is already running. Wait for it to finish before starting another." });
-  const { mobile, otp, date, topinLoginUrl } = req.body;
+  const { mobile, otp, date } = req.body;
   if (!mobile || !otp) return res.status(400).json({ error: "mobile and otp are required" });
   jobRunning = true;
   res.json({ started: true });
   // Small delay so the browser's EventSource connection is established first
   await new Promise(r => setTimeout(r, 400));
-  runPublish(mobile, otp, date || null, topinLoginUrl || DEFAULT_TOPIN_LOGIN_URL)
+  runPublish(mobile, otp, date || null)
     .catch(err => broadcast("error", `Fatal error: ${err.message}`))
     .finally(() => { jobRunning = false; });
 });
@@ -305,124 +302,65 @@ async function trySelector(page, selectors, timeout = 8000) {
   return null;
 }
 
-// Waits until the page DOM stops changing for ~1 second — ensures the React app
-// has fully rendered the authenticated dashboard (postMessage handshake complete,
-// tokens stored in localStorage) before we navigate away.
-async function waitForPageSettled(page, timeout = 20000) {
-  const end = Date.now() + timeout;
-  let prev = -1;
-  let stableCount = 0;
-  while (Date.now() < end) {
-    const curr = await page.evaluate(() => document.body?.innerHTML?.length ?? 0).catch(() => 0);
-    if (curr > 0 && curr === prev) {
-      stableCount++;
-      if (stableCount >= 2) return;
-    } else {
-      stableCount = 0;
-    }
-    prev = curr;
-    await page.waitForTimeout(500);
-  }
+async function waitForPageSettled(page, timeout = 15000) {
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForLoadState('networkidle', { timeout }).catch(() => {});
 }
 
-async function loginToTopin(page, mobile, otp, loginUrl) {
-  broadcast("info", "Navigating to Topin login…");
-  await page.goto(loginUrl, { waitUntil: "load", timeout: 30000 });
+const TOPIN_BASE_URL = 'https://config.topin.tech/';
 
-  const currentUrl = page.url();
-  broadcast("info", `  Page URL: ${currentUrl}`);
+async function loginToTopin(page, mobile, otp) {
+  broadcast("info", "Navigating to Topin…");
 
-  // Wait up to 15s for any input to appear (React SPA — renders after JS)
-  try { await page.waitForSelector("input", { timeout: 15000 }); } catch { /* none found in main doc */ }
+  // Navigate directly to config.topin.tech — it will redirect to accounts.ccbp.in/login
+  // as the main page URL when there is no valid session. This is different from navigating
+  // to the accounts URL with WINDOW_MODE=IN_APP, which bounces back to config.topin.tech
+  // immediately with the login embedded as an iframe (breaking the waitForURL check).
+  await page.goto(TOPIN_BASE_URL, { waitUntil: 'domcontentloaded' });
+  await waitForPageSettled(page);
 
-  // Check main document inputs
-  const inputs = await page.evaluate(() =>
-    [...document.querySelectorAll("input")].map(el => ({
-      type: el.type, name: el.name || "—",
-      placeholder: el.placeholder || "—", id: el.id || "—",
-      visible: el.offsetWidth > 0 && el.offsetHeight > 0,
-    }))
-  );
-  broadcast("info", `  Main doc inputs (${inputs.length}): ${JSON.stringify(inputs)}`);
+  broadcast("info", `  Page URL: ${page.url()}`);
 
-  // Check for iframes — CCBP login might render inside one
-  const frames = page.frames();
-  broadcast("info", `  Frames found: ${frames.length} — ${frames.map(f => f.url()).join(" | ")}`);
-  for (const frame of frames) {
-    if (frame === page.mainFrame()) continue;
-    try {
-      const frameInputs = await frame.evaluate(() =>
-        [...document.querySelectorAll("input")].map(el => ({
-          type: el.type, name: el.name || "—",
-          placeholder: el.placeholder || "—", id: el.id || "—",
-        }))
-      );
-      if (frameInputs.length > 0)
-        broadcast("info", `  Inputs in frame (${frame.url().slice(0, 60)}): ${JSON.stringify(frameInputs)}`);
-    } catch { /* cross-origin frame */ }
+  // If not redirected to login (e.g. stale session cookie), clear and retry
+  if (!page.url().includes('accounts.ccbp.in/login')) {
+    broadcast("info", "  Not on login page — clearing cookies and retrying…");
+    await page.context().clearCookies();
+    await page.goto(TOPIN_BASE_URL, { waitUntil: 'domcontentloaded' });
+    await waitForPageSettled(page);
+    broadcast("info", `  Page URL after retry: ${page.url()}`);
   }
 
-  // Phone input — try multiple possible selectors
-  const phoneSel = await trySelector(page, [
-    'input[name="phone"]',
-    'input[name="mobile"]',
-    'input[type="tel"]',
-    'input[placeholder*="phone" i]',
-    'input[placeholder*="mobile" i]',
-    'input[placeholder*="number" i]',
-    'input[placeholder*="enter" i]',
-    'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])',
-  ], 12000);
-  if (!phoneSel) throw new Error("Could not find phone/mobile input on Topin login page. Check the 'Inputs found' log line above.");
-  await page.fill(phoneSel, mobile);
-  broadcast("info", "  Entered phone number");
+  if (!page.url().includes('accounts.ccbp.in/login')) {
+    throw new Error(`Could not reach Topin login page. Current URL: ${page.url()}`);
+  }
 
-  // Get OTP button
-  const otpBtnSel = await trySelector(page, [
-    'button[data-testid="getOTPButton"]',
-    'button:has-text("Get OTP")',
-    'button:has-text("Send OTP")',
-    'button:has-text("Request OTP")',
-    'button[type="submit"]',
-  ], 5000);
-  if (!otpBtnSel) throw new Error("Could not find Get OTP button on Topin login page.");
-  await page.click(otpBtnSel);
+  // Phone number
+  await page.locator('input[placeholder="Enter Number"]').fill(mobile);
+  await page.getByRole('button', { name: 'GET OTP' }).click();
+  await page.waitForTimeout(2000);
+  broadcast("info", "  OTP requested");
 
-  // OTP input — split boxes or single field
-  const otpInputSel = await trySelector(page, [
-    'input[autocomplete="one-time-code"]',
-    'input[name="otp"]',
-    'input[placeholder*="otp" i]',
-    'input[placeholder*="code" i]',
-    'input[placeholder*="enter" i]',
-  ], 12000);
-  if (!otpInputSel) throw new Error("Could not find OTP input on Topin login page.");
-  await page.click(otpInputSel);
-  await page.keyboard.type(otp);
-  broadcast("info", "  Entered OTP");
+  // OTP — split digit boxes
+  const digits = otp.replace(/\D/g, '');
+  if (digits.length !== 6) throw new Error('OTP must be exactly 6 digits.');
+  const otpInputs = page.locator('input[aria-label*="Digit"], input[aria-label*="verification code"]');
+  await otpInputs.first().waitFor({ timeout: 10000 });
+  for (let i = 0; i < 6; i++) {
+    await otpInputs.nth(i).fill(digits[i]);
+    await page.waitForTimeout(100);
+  }
+  broadcast("info", "  OTP entered");
 
-  // Verify OTP button
-  const verifyBtnSel = await trySelector(page, [
-    'button[data-testid="multi-step-verify-otp-button"]',
-    'button:has-text("Verify OTP")',
-    'button:has-text("Verify")',
-    'button:has-text("Login")',
-    'button:has-text("Sign In")',
-    'button[type="submit"]',
-  ], 5000);
-  if (!verifyBtnSel) throw new Error("Could not find Verify OTP button on Topin login page.");
-  await page.click(verifyBtnSel);
-
-  // Wait for redirect to config.topin.tech — confirms login succeeded
+  await page.getByRole('button', { name: /Verify & Login/i }).click();
   broadcast("info", "  Waiting for login redirect…");
-  await page.waitForURL(/config\.topin\.tech/, { timeout: 30000 });
-  // Wait for DOM stability: the React SPA must process the postMessage from the
-  // login iframe (storing auth tokens in localStorage) and re-render the
-  // authenticated dashboard before we navigate away. networkidle fires too early
-  // (before the postMessage handshake completes); DOM stability fires after.
-  broadcast("info", "  Waiting for Topin dashboard to settle…");
-  await waitForPageSettled(page, 20000);
-  broadcast("success", "Logged in to Topin");
+
+  // Wait for redirect from accounts.ccbp.in back to config.topin.tech after successful OTP.
+  // 90s timeout matches topin-cloner — the redirect can be slow on cloud deployments.
+  await page.waitForURL(/config\.topin\.tech/, { timeout: 90000 });
+  await waitForPageSettled(page);
+  await page.waitForTimeout(5000);
+
+  broadcast("success", `Logged in to Topin — URL: ${page.url()}`);
 }
 
 // ── Date/time helpers ─────────────────────────────────────────────────────────
@@ -711,7 +649,7 @@ async function logJob(type, startMs, stats) {
 
 // ── Publish: main loop ────────────────────────────────────────────────────────
 
-async function runPublish(mobile, otp, date, loginUrl) {
+async function runPublish(mobile, otp, date) {
   const startMs = Date.now();
   cancelRequested = false;
   broadcast("info", "Fetching sessions from Firestore…");
@@ -772,7 +710,7 @@ async function runPublish(mobile, otp, date, loginUrl) {
 
   try {
     if (!sessionRestored) {
-      await loginToTopin(page, mobile, otp, loginUrl);
+      await loginToTopin(page, mobile, otp);
       await saveSession(context);
     }
 
