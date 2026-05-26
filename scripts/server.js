@@ -561,7 +561,18 @@ async function publishOneSession(page, session, assessments) {
       }
     }
   }
-  if (!cloneFound) throw new Error("Clone button not found after 2 attempts.");
+  if (!cloneFound) {
+    const currentUrl = page.url();
+    const allBtns = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button, a, [role="button"]'))
+        .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0)
+        .map(el => (el.textContent || el.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 60))
+        .filter(Boolean).slice(0, 20)
+    ).catch(() => []);
+    broadcast("info", `  [DEBUG] URL: ${currentUrl}`);
+    broadcast("info", `  [DEBUG] Buttons: ${JSON.stringify(allBtns)}`);
+    throw new Error("Clone button not found after 2 attempts.");
+  }
 
   await cloneLocator.click();
   await page.waitForURL(/create-assessment|edit-assessment/, { timeout: 30000 });
