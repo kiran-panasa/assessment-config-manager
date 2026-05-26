@@ -543,9 +543,8 @@ async function publishOneSession(page, session, assessments) {
   }
   await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
 
-  // ── 2. Clone button — text-based locator, retry with re-navigation ────────
-  // No fixed sleep: waitFor({ timeout: 30000 }) blocks until the button appears
-  const cloneLocator = page.locator('button, a, [role="button"]').filter({ hasText: /clone/i }).first();
+  // ── 2. Clone button — aria-label selector (button text is inside a <span>) ──
+  const cloneLocator = page.locator('[aria-label="clone-assessment"]').first();
   let cloneFound = false;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
