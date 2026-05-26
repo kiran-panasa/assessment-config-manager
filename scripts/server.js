@@ -355,11 +355,34 @@ async function loginToTopin(page, mobile, otp) {
   broadcast("info", "  Waiting for login redirect…");
 
   // Wait for redirect from accounts.ccbp.in back to config.topin.tech after successful OTP.
-  // 90s timeout matches topin-cloner — the redirect can be slow on cloud deployments.
   await page.waitForURL(/config\.topin\.tech/, { timeout: 90000 });
-  await waitForPageSettled(page);
-  await page.waitForTimeout(5000);
+  broadcast("info", `  Redirected — URL: ${page.url()}`);
 
+  await page.waitForTimeout(2000);
+  await waitForPageSettled(page);
+
+  // After redirect, the URL contains ?auth_code=... The SPA exchanges it for tokens
+  // (via an API call to accounts.ccbp.in) then removes it from the URL.
+  // Navigating away before this exchange completes leaves localStorage empty → login redirect.
+  if (page.url().includes('auth_code')) {
+    broadcast("info", "  Waiting for SPA to exchange auth code for tokens…");
+    try {
+      await page.waitForURL(
+        u => u.toString().includes('config.topin.tech') && !u.toString().includes('auth_code'),
+        { timeout: 30000 }
+      );
+      await waitForPageSettled(page);
+      broadcast("info", `  Auth code exchanged — URL: ${page.url()}`);
+    } catch {
+      broadcast("warn", `  Auth code still in URL after 30s — URL: ${page.url()}`);
+    }
+  }
+
+  // Log localStorage keys for diagnostics
+  const lsKeys = await page.evaluate(() => Object.keys(localStorage)).catch(() => []);
+  broadcast("info", `  localStorage keys (${lsKeys.length}): ${lsKeys.slice(0, 10).join(', ')}`);
+
+  await page.waitForTimeout(3000);
   broadcast("success", `Logged in to Topin — URL: ${page.url()}`);
 }
 
