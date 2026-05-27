@@ -80,14 +80,42 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
     navigator.clipboard.writeText(link).then(() => showToast("Link copied!")).catch(() => showToast("Copy failed.", "error"));
   };
 
+  const downloadCSV = () => {
+    const headers = ["Student Name", "NIAT ID", "Student UID", "Skill", "Level", "Contest Date", "Time Slot", "Unique Exam ID", "Invite Status", "User Assessment Link"];
+    const escape = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csvRows = [
+      headers.map(escape).join(","),
+      ...filtered.map(r => [
+        r.studentName, r.niatId, r.studentUid, r.skill, r.skillLevel,
+        r.contestDate, r.timeSlot, r.uniqueExamId,
+        r.inviteStatus === "sent" ? "Sent" : r.inviteStatus === "failed" ? "Failed" : "Not Sent",
+        r.userAssessmentLink ?? "",
+      ].map(escape).join(",")),
+    ];
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `invited-students${filters.contestDate !== "All" ? `-${filters.contestDate}` : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const selStyle = { ...S.select, width: "auto", minWidth: 120 };
 
   return (
     <div style={{ animation: "fadeIn 0.2s ease" }}>
       <div style={S.header}>
         <span style={S.headerTitle}>Invited Students</span>
-        <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, fontSize: 12, color: "#94a3b8" }}>
-          {filtered.length !== rows.length ? `${filtered.length} of ${rows.length} students` : `${rows.length} students`}
+        <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 12, color: "#94a3b8" }}>
+            {filtered.length !== rows.length ? `${filtered.length} of ${rows.length} students` : `${rows.length} students`}
+          </span>
+          {filtered.length > 0 && (
+            <button onClick={downloadCSV} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>
+              Download CSV
+            </button>
+          )}
         </div>
       </div>
 
