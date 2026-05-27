@@ -530,46 +530,30 @@ async function publishOneSession(page, session, assessments) {
   if (!config?.url) throw new Error(`No config URL for ${session.skill} - L${session.level}`);
 
   // ── 1. Open config URL in VIEW mode — Clone button only exists there ────
-  // Convert /edit-assessment/ → /view-assessment/ (Clone is absent on edit page)
   const viewUrl = config.url.replace("/edit-assessment/", "/view-assessment/");
   broadcast("info", `  Opening view URL: ${viewUrl.slice(0, 100)}`);
-  await page.goto(viewUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-  await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
-  // If Topin redirected us to the login page, the session is invalid — fail fast
+  await page.goto(viewUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+
   if (page.url().includes("accounts.ccbp.in")) {
-    throw new Error(`Session invalid — redirected to login when opening view URL. Re-run Publish with a fresh OTP.`);
+    throw new Error("Session invalid — redirected to login. Re-run Publish with a fresh OTP.");
   }
 
-  // ── 2. Clone button — same selector as topin-cloner (proven working)
+  // ── 2. Clone button — wait up to 90s; page API calls can be slow on cloud ──
+  // topin-cloner uses the same selector. The button appears after the SPA finishes
+  // fetching assessment data, which can take 60+ seconds on Render's free tier.
   const cloneLocator = page.locator('button, a, [role="button"]').filter({ hasText: /clone/i }).first();
-  let cloneFound = false;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      await cloneLocator.waitFor({ timeout: 30000 });
-      cloneFound = true;
-      break;
-    } catch {
-      if (attempt === 1) {
-        broadcast("info", "  Clone button not ready, re-navigating…");
-        await page.goto(viewUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
-        await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
-        if (page.url().includes("accounts.ccbp.in")) {
-          throw new Error(`Session invalid — redirected to login on re-navigation. Re-run Publish with a fresh OTP.`);
-        }
-      }
-    }
-  }
-  if (!cloneFound) {
-    const currentUrl = page.url();
+  try {
+    await cloneLocator.waitFor({ timeout: 90000 });
+  } catch {
     const allBtns = await page.evaluate(() =>
       Array.from(document.querySelectorAll('button, a, [role="button"]'))
         .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0)
         .map(el => (el.textContent || el.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 60))
         .filter(Boolean).slice(0, 20)
     ).catch(() => []);
-    broadcast("info", `  [DEBUG] URL: ${currentUrl}`);
+    broadcast("info", `  [DEBUG] URL: ${page.url()}`);
     broadcast("info", `  [DEBUG] Buttons: ${JSON.stringify(allBtns)}`);
-    throw new Error("Clone button not found after 2 attempts.");
+    throw new Error("Clone button not found within 90s.");
   }
 
   await cloneLocator.click();
