@@ -352,48 +352,12 @@ async function loginToTopin(page, mobile, otp) {
   broadcast("info", "  OTP entered");
 
   await page.getByRole('button', { name: /Verify & Login/i }).click();
-  broadcast("info", "  Waiting for OAuth redirect and token exchange…");
+  broadcast("info", "  Waiting for login redirect…");
 
-  // Phase 1: wait for redirect to config.topin.tech (may fire while page.url() still shows
-  // accounts.ccbp.in — Playwright race condition on fast redirects)
   await page.waitForURL(/config\.topin\.tech/, { timeout: 90000 });
-
-  // Phase 2: wait for the SPA to exchange the auth_code for tokens and clean the URL.
-  // The SPA removes ?auth_code=... once tokens are stored in localStorage — that is the
-  // definitive signal the session is ready. Chaining this after Phase 1 avoids the race
-  // condition where page.url() still shows accounts.ccbp.in at Phase 1 completion.
-  let tokenExchangeDone = false;
-  try {
-    await page.waitForURL(
-      url => {
-        const s = url.toString();
-        return s.includes('config.topin.tech') && !s.includes('auth_code');
-      },
-      { timeout: 60000 }
-    );
-    tokenExchangeDone = true;
-    broadcast("info", `  Token exchange complete — URL: ${page.url()}`);
-  } catch {
-    broadcast("warn", `  Token exchange timed out — URL: ${page.url()}`);
-  }
-
+  await page.waitForTimeout(2000);
   await waitForPageSettled(page);
-
-  // Phase 3 fallback: if auth_code never cleared, wait for an authenticated UI element
-  if (!tokenExchangeDone) {
-    broadcast("info", "  Waiting for authenticated dashboard element as fallback…");
-    try {
-      await page.locator('button, [role="button"]')
-        .filter({ hasText: /home|create/i }).first()
-        .waitFor({ timeout: 30000 });
-      broadcast("info", "  Authenticated element visible");
-    } catch {
-      broadcast("warn", "  Authenticated element not found — proceeding");
-    }
-  }
-
-  const lsKeys = await page.evaluate(() => Object.keys(localStorage)).catch(() => []);
-  broadcast("info", `  localStorage keys (${lsKeys.length}): ${lsKeys.slice(0, 10).join(', ')}`);
+  await page.waitForTimeout(5000);
 
   broadcast("success", `Logged in to Topin — URL: ${page.url()}`);
 }
@@ -564,6 +528,8 @@ async function publishOneSession(page, session, assessments) {
   // Topin sometimes skips Section Details and lands directly on /edit-assessment.
   // Only click Save & Next if we're actually on the create-assessment step.
   if (page.url().includes('create-assessment')) {
+    await waitForPageSettled(page);
+    await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().waitFor({ timeout: 60000 });
     await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click();
     await page.waitForURL(/edit-assessment/, { timeout: 30000 });
     broadcast("info", "  Section Details done — on Final Review");
