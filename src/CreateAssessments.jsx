@@ -23,7 +23,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     apiEndpoint: "", apiToken: "",
     serverUrl: "http://localhost:3001",
     serverSecret: "",
-    topinLoginUrl: "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp&WINDOW_MODE=IN_APP",
+    topinLoginUrl: "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp",
   });
   const [credsSaved, setCredsSaved] = useState(false);
   const [credsLoaded, setCredsLoaded] = useState(false);
@@ -53,17 +53,13 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
   useEffect(() => {
     if (!credsLoaded || !creds.serverUrl) return;
     setServerOnline(null);
-    const isLocal = creds.serverUrl.includes("localhost") || creds.serverUrl.includes("127.0.0.1");
     const headers = creds.serverSecret ? { "x-server-token": creds.serverSecret } : {};
 
     const check = () =>
-      fetch(`${creds.serverUrl}/health`, { signal: AbortSignal.timeout(isLocal ? 3000 : 40000), headers })
+      fetch(`${creds.serverUrl}/health`, { signal: AbortSignal.timeout(3000), headers })
         .then(r => setServerOnline(r.ok))
         .catch(() => setServerOnline(false));
 
-    // On load, check if a job is already running on the server (e.g. page was refreshed
-    // mid-publish). If so, restore the running state and reconnect the SSE stream so the
-    // Cancel button reappears and new log lines keep flowing in.
     const checkJobStatus = () =>
       fetch(`${creds.serverUrl}/status`, { signal: AbortSignal.timeout(5000), headers })
         .then(r => r.json())
@@ -77,7 +73,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
 
     check();
     checkJobStatus();
-    const id = setInterval(check, isLocal ? 5000 : 15000);
+    const id = setInterval(check, 5000);
     return () => clearInterval(id);
   }, [creds.serverUrl, creds.serverSecret, credsLoaded]);
 
@@ -219,9 +215,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
             background: serverOnline === null ? "#f59e0b" : serverOnline ? "#00c896" : "#ef4444" }} />
           <span style={{ fontSize: 12, fontFamily: "'Inter', sans-serif",
             color: serverOnline === null ? "#d97706" : serverOnline ? "#059669" : "#ef4444" }}>
-            {serverOnline === null
-              ? (creds.serverUrl?.includes("localhost") ? "Checking…" : "Waking up server…")
-              : serverOnline ? "Server online" : "Server offline"}
+            {serverOnline === null ? "Checking…" : serverOnline ? "Server online" : "Server offline"}
           </span>
         </div>
       </div>
@@ -232,9 +226,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
         {serverOnline === false && (
           <div style={{ marginBottom: 24, padding: "16px 20px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 12, color: "#dc2626", lineHeight: 1.9 }}>
             <strong style={{ color: "#dc2626" }}>Server is not reachable.</strong>{" "}
-            {creds.serverUrl?.includes("localhost")
-              ? <>Start it locally: <code style={{ background: "#1e293b", padding: "2px 8px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>cd scripts &amp;&amp; node server.js</code></>
-              : "Check that your Railway service is running and the URL in Credentials is correct."}
+            Start it locally: <code style={{ background: "#1e293b", padding: "2px 8px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>cd scripts &amp;&amp; node --env-file=.env server.js</code>
           </div>
         )}
 
@@ -249,21 +241,20 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
               <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>Automation Server</div>
               <label style={S.label}>Server URL</label>
               <input style={S.input} type="url"
-                placeholder="http://localhost:3001  or  https://your-app.onrender.com"
+                placeholder="http://localhost:3001"
                 value={creds.serverUrl}
                 onChange={e => setCreds(p => ({ ...p, serverUrl: e.target.value.trim() }))} />
               <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
-                Local: <code style={{ color: "#3b82f6" }}>http://localhost:3001</code> &nbsp;·&nbsp;
-                Render: paste your Render service URL here — shared across all devices automatically.
+                Run locally with: <code style={{ color: "#3b82f6" }}>cd scripts &amp;&amp; node --env-file=.env server.js</code>
               </div>
               <div style={{ marginTop: 18 }}>
                 <label style={S.label}>Server Secret</label>
                 <input style={S.input} type="password"
-                  placeholder="Must match SERVER_SECRET on Render (leave blank for local dev)"
+                  placeholder="Must match SERVER_SECRET in scripts/.env"
                   value={creds.serverSecret}
                   onChange={e => setCreds(p => ({ ...p, serverSecret: e.target.value }))} />
                 <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
-                  Set <code style={{ color: "#3b82f6" }}>SERVER_SECRET</code> in Render → Environment, then paste the same value here.
+                  Must match <code style={{ color: "#3b82f6" }}>SERVER_SECRET</code> in <code style={{ color: "#3b82f6" }}>scripts/.env</code>.
                   Requests without a matching token will be rejected with 401.
                 </div>
               </div>

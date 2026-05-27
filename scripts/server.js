@@ -1,16 +1,10 @@
 /**
- * server.js
- *
- * Local Express server that the "Create Assessments" page talks to.
- * Runs Playwright (publish) and the invite API call loop, streaming
- * real-time progress back to the browser via Server-Sent Events.
+ * server.js — local automation server
  *
  * HOW TO RUN
  *   cd scripts
- *   npm install       (adds express, cors, playwright, firebase)
- *   node server.js
- *
- * Then open the app and go to "Create Assessments".
+ *   npm install
+ *   node --env-file=.env server.js
  */
 
 import express from "express";
@@ -50,13 +44,6 @@ const clients = new Set();
 let jobRunning = false;
 let cancelRequested = false;
 
-// Keep SSE connections alive — cloud proxies drop silent connections after ~30s
-setInterval(() => {
-  for (const res of clients) {
-    try { res.write(": heartbeat\n\n"); }
-    catch { clients.delete(res); }
-  }
-}, 15000);
 
 function broadcast(type, message, extra = {}) {
   const data = JSON.stringify({ type, message, ts: Date.now(), ...extra });
