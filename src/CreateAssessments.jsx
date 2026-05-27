@@ -54,14 +54,32 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
     if (!credsLoaded || !creds.serverUrl) return;
     setServerOnline(null);
     const isLocal = creds.serverUrl.includes("localhost") || creds.serverUrl.includes("127.0.0.1");
+    const headers = creds.serverSecret ? { "x-server-token": creds.serverSecret } : {};
+
     const check = () =>
-      fetch(`${creds.serverUrl}/health`, { signal: AbortSignal.timeout(isLocal ? 3000 : 40000) })
+      fetch(`${creds.serverUrl}/health`, { signal: AbortSignal.timeout(isLocal ? 3000 : 40000), headers })
         .then(r => setServerOnline(r.ok))
         .catch(() => setServerOnline(false));
+
+    // On load, check if a job is already running on the server (e.g. page was refreshed
+    // mid-publish). If so, restore the running state and reconnect the SSE stream so the
+    // Cancel button reappears and new log lines keep flowing in.
+    const checkJobStatus = () =>
+      fetch(`${creds.serverUrl}/status`, { signal: AbortSignal.timeout(5000), headers })
+        .then(r => r.json())
+        .then(data => {
+          if (data.jobRunning && !esRef.current) {
+            setRunning("publish");
+            startSSE();
+          }
+        })
+        .catch(() => {});
+
     check();
+    checkJobStatus();
     const id = setInterval(check, isLocal ? 5000 : 15000);
     return () => clearInterval(id);
-  }, [creds.serverUrl, credsLoaded]);
+  }, [creds.serverUrl, creds.serverSecret, credsLoaded]);
 
   // Scroll progress log to bottom
   useEffect(() => {
@@ -336,22 +354,29 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
             {/* Action buttons */}
             <div style={{ ...S.card, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
               <div>
-                <button style={{ ...S.btn("primary"), minWidth: 190, opacity: (running || !serverOnline) ? 0.45 : 1 }}
-                  onClick={handlePublish} disabled={!!running || !serverOnline}>
-                  {running === "publish" ? "Publishing…" : "Publish Sessions"}
-                </button>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button style={{ ...S.btn("primary"), minWidth: 190, opacity: (running || !serverOnline) ? 0.45 : 1 }}
+                    onClick={handlePublish} disabled={!!running || !serverOnline}>
+                    {running === "publish" ? "Publishing…" : "Publish Sessions"}
+                  </button>
+                  {running === "publish" && (
+                    <button style={{ ...S.btn("danger"), minWidth: 90 }} onClick={cancelJob}>Stop</button>
+                  )}
+                </div>
                 <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8" }}>Opens browser · clones &amp; publishes on Topin</div>
               </div>
               <div>
-                <button style={{ ...S.btn("secondary"), minWidth: 190, opacity: (running || !serverOnline) ? 0.45 : 1, border: "1px solid #e2e8f0" }}
-                  onClick={handleInvite} disabled={!!running || !serverOnline}>
-                  {running === "invite" ? "Inviting…" : "Invite Students"}
-                </button>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button style={{ ...S.btn("secondary"), minWidth: 190, opacity: (running || !serverOnline) ? 0.45 : 1, border: "1px solid #e2e8f0" }}
+                    onClick={handleInvite} disabled={!!running || !serverOnline}>
+                    {running === "invite" ? "Inviting…" : "Invite Students"}
+                  </button>
+                  {running === "invite" && (
+                    <button style={{ ...S.btn("danger"), minWidth: 90 }} onClick={cancelJob}>Stop</button>
+                  )}
+                </div>
                 <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8" }}>Sends API invite to all pending students</div>
               </div>
-              {running && (
-                <button style={{ ...S.btn("danger"), minWidth: 110, marginLeft: "auto", alignSelf: "flex-start" }} onClick={cancelJob}>Cancel</button>
-              )}
             </div>
 
             {/* Progress log */}
