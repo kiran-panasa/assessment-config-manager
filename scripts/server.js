@@ -573,7 +573,11 @@ async function publishOneSession(page, session, assessments) {
 
   const copyLinkButton = page.getByRole('button', { name: 'Copy Link' });
   await copyLinkButton.waitFor({ timeout: 60000 });
-  broadcast("info", "  Published — extracting Assessment Link…");
+
+  const viewAssessmentUrl = page.url(); // config.topin.tech/view-assessment/<uuid>
+  const viewDetailsUrl = viewAssessmentUrl.replace('/view-assessment/', '/view-details/');
+  broadcast("info", `  Published — Config URL: ${viewAssessmentUrl}`);
+  broadcast("info", "  Extracting Assessment Link…");
 
   // Try clipboard first, fall back to DOM scan
   let assessmentLink = null;
@@ -611,7 +615,7 @@ async function publishOneSession(page, session, assessments) {
     assessmentId = m ? m[1] : null;
   }
   if (!assessmentId) throw new Error(`Could not extract org_id from link: ${assessmentLink}`);
-  return { assessmentId, assessmentLink };
+  return { assessmentId, assessmentLink, viewAssessmentUrl, viewDetailsUrl };
 }
 
 // ── Job logger (writes duration to Firestore for credit tracking) ─────────────
@@ -702,13 +706,15 @@ async function runPublish(mobile, otp, date) {
       broadcast("info", `\n[${num}/${sessions.length}] ${session.assessmentTitle} — ${session.dateOfAssessment} ${session.startTimeSlot}`);
 
       try {
-        const { assessmentId, assessmentLink } = await publishOneSession(page, session, assessments);
+        const { assessmentId, assessmentLink, viewAssessmentUrl, viewDetailsUrl } = await publishOneSession(page, session, assessments);
 
         await updateDoc(doc(db, "examSessions", session.id), {
           topinAssessmentId: assessmentId,
           assessmentLink,
-          publishStatus:     "published",
-          publishedAt:       new Date().toISOString(),
+          viewAssessmentUrl,
+          viewDetailsUrl,
+          publishStatus: "published",
+          publishedAt:   new Date().toISOString(),
         });
         broadcast("success", `  Assessment ID: ${assessmentId}`);
         passed++;

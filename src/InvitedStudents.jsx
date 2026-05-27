@@ -17,7 +17,8 @@ function deriveUserLink(assessmentLink) {
 
 const COLS = [
   "Student Name", "NIAT ID", "Student UID", "Skill", "Level",
-  "Contest Date", "Time Slot", "Unique Exam ID", "Invite", "User Assessment Link",
+  "Contest Date", "Time Slot", "Unique Exam ID", "Invite",
+  "User Assessment Link", "Config Link", "Details Link",
 ];
 
 export default function InvitedStudents({ S, bookingRows, examSessions, showToast }) {
@@ -38,6 +39,8 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
         ...row,
         uniqueExamId: s?.uniqueExamId ?? "—",
         userAssessmentLink: s?.assessmentLink ? deriveUserLink(s.assessmentLink) : null,
+        viewAssessmentUrl: s?.viewAssessmentUrl ?? null,
+        viewDetailsUrl: s?.viewDetailsUrl ?? null,
         mapped: !!s,
       };
     }), [bookingRows, sessionMap]);
@@ -81,7 +84,7 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
   };
 
   const downloadCSV = () => {
-    const headers = ["Student Name", "NIAT ID", "Student UID", "Skill", "Level", "Contest Date", "Time Slot", "Unique Exam ID", "Invite Status", "User Assessment Link"];
+    const headers = ["Student Name", "NIAT ID", "Student UID", "Skill", "Level", "Contest Date", "Time Slot", "Unique Exam ID", "Invite Status", "User Assessment Link", "Config Link", "Details Link"];
     const escape = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const csvRows = [
       headers.map(escape).join(","),
@@ -89,7 +92,7 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
         r.studentName, r.niatId, r.studentUid, r.skill, r.skillLevel,
         r.contestDate, r.timeSlot, r.uniqueExamId,
         r.inviteStatus === "sent" ? "Sent" : r.inviteStatus === "failed" ? "Failed" : "Not Sent",
-        r.userAssessmentLink ?? "",
+        r.userAssessmentLink ?? "", r.viewAssessmentUrl ?? "", r.viewDetailsUrl ?? "",
       ].map(escape).join(",")),
     ];
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
@@ -219,6 +222,24 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
                             <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
                           )}
                         </td>
+                        {[["viewAssessmentUrl", "Config"], ["viewDetailsUrl", "Details"]].map(([field, label]) => (
+                          <td key={field} style={{ ...S.td, maxWidth: 200 }}>
+                            {row[field] ? (
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <a href={row[field]} target="_blank" rel="noreferrer"
+                                  style={{ color: "#3b82f6", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace" }}>
+                                  {label} ↗
+                                </a>
+                                <button onClick={() => copyLink(row[field])}
+                                  style={{ ...S.btn("secondary"), padding: "3px 8px", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>
+                                  Copy
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+                            )}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>
