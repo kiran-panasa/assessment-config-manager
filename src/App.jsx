@@ -31,7 +31,7 @@ const T1_COLS = [
   ["Status", "status"], ["Student UID", "studentUid"], ["Booked At", "bookedAt"],
   ["Contest Link", "contestLink"], ["Classroom Details", "classroomDetails"],
 ];
-const T2_COLS = ["Assessment Title", "Date", "Start Time", "End Time", "Unique Exam ID", "EXIT PIN", "Topin ID", "Publish Status"];
+const T2_COLS = ["Assessment Title", "Date", "Start Time", "End Time", "Unique Exam ID", "EXIT PIN", "Topin ID", "Publish Status", "Config Link", "Details Link"];
 const T3_COLS = ["Student Name", "NIAT ID", "Student UID", "Skill", "Level", "Contest Date", "Time Slot", "Unique Exam ID", "Invite"];
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -911,6 +911,16 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                                 ? <span style={S.badge("#ff5555")}>Failed</span>
                                 : <span style={S.badge("#555a7a")}>Pending</span>}
                             </td>
+                            {[["viewAssessmentUrl", "Config"], ["viewDetailsUrl", "Details"]].map(([field, label]) => (
+                              <td key={field} style={{ ...S.td, whiteSpace: "nowrap" }}>
+                                {s[field]
+                                  ? <a href={s[field]} target="_blank" rel="noreferrer"
+                                      style={{ color: "#3b82f6", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace" }}>
+                                      {label} ↗
+                                    </a>
+                                  : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}
+                              </td>
+                            ))}
                             <td style={S.td}>
                               <div style={{ display: "flex", gap: 6 }}>
                                 {s.publishStatus !== "published"
