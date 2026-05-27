@@ -96,7 +96,7 @@ function buildSessionKey(skill, level, date, timeSlot) {
 }
 
 function buildExamId(skill, level, date, timeSlot) {
-  return `NG26_NIAT_GRIT_${skill.toUpperCase().replace(/\s+/g, "_")}_L${level}_${toISODate(date)}_${minsToHHMM(timeToMins(timeSlot))}`;
+  return `NG26_NIAT_GRIT_${skill.toUpperCase()}_L${level}_${toISODate(date)}_${minsToHHMM(timeToMins(timeSlot))}`;
 }
 
 function parseSessionSkillLevel(title) {
