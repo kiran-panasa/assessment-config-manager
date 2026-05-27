@@ -845,6 +845,25 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                     <button onClick={() => { setT2Filters(T2_FILTER_INIT); setT2Page(1); }}
                       style={{ ...S.btn("secondary"), padding: "7px 14px", fontSize: 12 }}>Reset</button>
                   )}
+                  {t2Filtered.length > 0 && (
+                    <button style={{ ...S.btn("secondary"), padding: "7px 14px", fontSize: 12 }} onClick={() => {
+                      const headers = ["Assessment Title", "Date", "Start Time", "End Time", "Unique Exam ID", "EXIT PIN", "Topin ID", "Publish Status", "Config Link", "Details Link"];
+                      const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+                      const rows = [
+                        headers.map(esc).join(","),
+                        ...t2Filtered.map(s => [
+                          s.assessmentTitle, s.dateOfAssessment, s.startTimeSlot, s.endTimeSlot,
+                          s.uniqueExamId, s.exitPin, s.topinAssessmentId ?? "",
+                          s.publishStatus ?? "pending",
+                          s.viewAssessmentUrl ?? "", s.viewDetailsUrl ?? "",
+                        ].map(esc).join(",")),
+                      ];
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" }));
+                      a.download = `unique-assessments${t2Filters.dateOfAssessment !== "All" ? `-${t2Filters.dateOfAssessment}` : ""}.csv`;
+                      a.click();
+                    }}>Download CSV</button>
+                  )}
                   <button
                     disabled={!t2AnyActive}
                     onClick={() => openDeleteModal("sessions")}
@@ -929,7 +948,27 @@ function StudentBookings({ S, assessments, bookingRows, examSessions, writeLog, 
                 <div style={S.sectionTitle}>User Mapping</div>
                 <div style={{ ...S.sectionSub, marginBottom: 0 }}>Each student mapped to their Unique Exam ID.</div>
               </div>
-              <DateFilter dates={t3Dates} value={t3Date} onChange={v => { setT3Date(v); setT3Page(1); }} S={S} />
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <DateFilter dates={t3Dates} value={t3Date} onChange={v => { setT3Date(v); setT3Page(1); }} S={S} />
+                {t3Filtered.length > 0 && (
+                  <button style={{ ...S.btn("secondary"), padding: "7px 14px", fontSize: 12 }} onClick={() => {
+                    const headers = ["Student Name", "NIAT ID", "Student UID", "Skill", "Level", "Contest Date", "Time Slot", "Unique Exam ID", "Invite Status"];
+                    const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+                    const rows = [
+                      headers.map(esc).join(","),
+                      ...t3Filtered.map(r => [
+                        r.studentName, r.niatId, r.studentUid, r.skill, r.skillLevel,
+                        r.contestDate, r.timeSlot, r.uniqueExamId,
+                        r.inviteStatus === "sent" ? "Sent" : r.inviteStatus === "failed" ? "Failed" : "Not Sent",
+                      ].map(esc).join(",")),
+                    ];
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" }));
+                    a.download = `user-mapping${t3Date !== "All" ? `-${t3Date}` : ""}.csv`;
+                    a.click();
+                  }}>Download CSV</button>
+                )}
+              </div>
             </div>
             <div style={S.card}>
               {t3Filtered.length === 0 ? (
