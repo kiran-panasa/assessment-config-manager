@@ -562,33 +562,18 @@ async function publishOneSession(page, session, assessments) {
 
   await cloneLocator.click();
   await page.waitForURL(/create-assessment|edit-assessment/, { timeout: 30000 });
-  broadcast("info", "  Cloned — on Section Details");
+  broadcast("info", `  Cloned — URL: ${page.url()}`);
 
-  // ── 3. Section Details: Save & Next ──────────────────────────────────────
-  await waitForPageSettled(page);
-
-  // Debug: log visible buttons so we can confirm the exact button text
-  const sectionBtns = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('button, a, [role="button"]'))
-      .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0)
-      .map(el => (el.textContent || el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ').slice(0, 60))
-      .filter(Boolean).slice(0, 15)
-  ).catch(() => []);
-  broadcast("info", `  [DEBUG] Section Details buttons: ${JSON.stringify(sectionBtns)}`);
-
-  // Try Save & Next first; fall back to Next / Continue if the button label differs
-  const saveNextLocator = page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first();
-  const nextLocator     = page.locator('button, a, [role="button"]').filter({ hasText: /^next$/i }).first();
-  const continueLocator = page.locator('button, a, [role="button"]').filter({ hasText: /^continue$/i }).first();
-
-  const hasSaveNext = await saveNextLocator.isVisible({ timeout: 5000 }).catch(() => false);
-  const hasNext     = !hasSaveNext && await nextLocator.isVisible({ timeout: 3000 }).catch(() => false);
-
-  if (hasSaveNext)      { await saveNextLocator.click({ timeout: 15000 }); }
-  else if (hasNext)     { await nextLocator.click({ timeout: 15000 }); }
-  else                  { await continueLocator.click({ timeout: 15000 }); }
-
-  await page.waitForURL(/edit-assessment/, { timeout: 30000 });
+  // ── 3. Section Details (only if Topin lands on /create-assessment first) ──
+  // Topin sometimes skips Section Details and lands directly on /edit-assessment.
+  // Only click Save & Next if we're actually on the create-assessment step.
+  if (page.url().includes('create-assessment')) {
+    await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click();
+    await page.waitForURL(/edit-assessment/, { timeout: 30000 });
+    broadcast("info", "  Section Details done — on Final Review");
+  } else {
+    broadcast("info", "  Skipped Section Details — already on Final Review");
+  }
   await page.locator('input[placeholder="Enter Assessment Name"]').waitFor({ timeout: 30000 });
   broadcast("info", "  On Final Review — filling details…");
 
