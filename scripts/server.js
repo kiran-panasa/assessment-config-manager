@@ -529,20 +529,7 @@ async function publishOneSession(page, session, assessments) {
   // ── 4. Assessment Name ────────────────────────────────────────────────────
   await page.locator('input[placeholder="Enter Assessment Name"]').fill(session.assessmentTitle);
 
-  // ── 5. Tags — clear existing, fill Unique Exam ID ────────────────────────
-  await page.evaluate(() => {
-    const chips = Array.from(
-      document.querySelectorAll('[data-testid="bscd-assess-categories-input"] .Select__multi-value'),
-    );
-    chips.forEach(chip => {
-      const remove = chip.querySelector('.Select__multi-value__remove');
-      if (remove) {
-        remove.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-        remove.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      }
-    });
-  });
-  await page.waitForTimeout(300);
+  // ── 5. Tags — append Unique Exam ID as 3rd tag (preserve existing 2 from template) ──
   const tagsInput = page.locator('[data-testid="bscd-assess-categories-input"] input').first();
   await tagsInput.fill(session.uniqueExamId);
   await tagsInput.press('Enter');
