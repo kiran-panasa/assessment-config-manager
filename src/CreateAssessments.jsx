@@ -45,11 +45,11 @@ export default function CreateAssessments({ S, showToast }) {
       .catch(() => setCredsLoaded(true));
 
     Promise.all([
-      api.get("/api/sessions").catch(() => []),
-      api.get("/api/bookings").catch(() => []),
+      api.get("/api/sessions").catch(() => ({})),
+      api.get("/api/bookings").catch(() => ({})),
     ]).then(([sessions, bookings]) => {
-      setExamSessions(sessions || []);
-      setBookingRows(bookings || []);
+      setExamSessions(sessions.sessions || []);
+      setBookingRows(bookings.rows || []);
     });
   }, []);
 

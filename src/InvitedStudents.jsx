@@ -37,8 +37,8 @@ export default function InvitedStudents({ S, showToast }) {
         api.get("/api/bookings"),
         api.get("/api/sessions"),
       ]);
-      setBookingRows(bookings || []);
-      setExamSessions(sessions || []);
+      setBookingRows(bookings.rows || []);
+      setExamSessions(sessions.sessions || []);
     } catch { /* silent */ }
     setLoading(false);
   }, []);

@@ -104,7 +104,7 @@ export default function InterviewerView({ S, showToast }) {
     setLoading(true);
     try {
       const data = await api.get("/api/interviews");
-      const sorted = (data || []).sort((a, b) =>
+      const sorted = (data.interviews || []).sort((a, b) =>
         (a.interviewDate || "").localeCompare(b.interviewDate || "") ||
         (a.interviewTime || "").localeCompare(b.interviewTime || "")
       );
