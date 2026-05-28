@@ -11,16 +11,27 @@ const DEFAULT_ROLES = [
   { key: "content-team", name: "Content Team", pages: ["assessments"], isSystem: true },
   { key: "central-ops",  name: "Central Ops",  pages: ["bookings", "invited"], isSystem: true },
   { key: "admin",        name: "Admin",         pages: ["assessments", "bookings", "create", "invited", "credentials"], isSystem: true },
+  { key: "interviewer",  name: "Interviewer",   pages: ["interviews"], isSystem: true },
 ];
+
+// Version-aware seed: bumping SEED_VERSION ensures new system roles are
+// created on existing deployments without re-running the full seed.
+const SEED_VERSION = 2;
 
 async function seedRoles() {
   const flagRef = doc(db, "config", "seeds");
   const flag = await getDoc(flagRef);
-  if (flag.exists()) return;
+  const currentVersion = flag.exists() ? (flag.data().version || 1) : 0;
+  if (currentVersion >= SEED_VERSION) return;
+
   for (const role of DEFAULT_ROLES) {
-    await setDoc(doc(db, "roles", role.key), { ...role, createdAt: serverTimestamp() });
+    const roleRef = doc(db, "roles", role.key);
+    const snap = await getDoc(roleRef);
+    if (!snap.exists()) {
+      await setDoc(roleRef, { ...role, createdAt: serverTimestamp() });
+    }
   }
-  await setDoc(flagRef, { rolesSeeded: true, seededAt: serverTimestamp() });
+  await setDoc(flagRef, { rolesSeeded: true, seededAt: serverTimestamp(), version: SEED_VERSION }, { merge: true });
 }
 
 const AuthContext = createContext(null);

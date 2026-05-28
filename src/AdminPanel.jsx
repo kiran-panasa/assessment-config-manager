@@ -11,6 +11,7 @@ const ALL_PAGES = [
   { key: "bookings",     label: "Student Bookings" },
   { key: "create",       label: "Create Assessments" },
   { key: "invited",      label: "Invited Students" },
+  { key: "interviews",   label: "Interview Schedule" },
   { key: "credentials",  label: "Credentials Tab (server secret)" },
 ];
 

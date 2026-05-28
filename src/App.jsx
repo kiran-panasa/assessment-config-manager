@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "./AuthContext";
 import CreateAssessments from "./CreateAssessments";
 import InvitedStudents from "./InvitedStudents";
 import AdminPanel from "./AdminPanel";
+import InterviewerView from "./InterviewerView";
 import LoginPage from "./LoginPage";
 import PendingPage from "./PendingPage";
 import {
@@ -265,6 +266,16 @@ const IconInvited = ({ color }) => (
 const IconAdmin = ({ color }) => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+  </svg>
+);
+
+const IconInterviews = ({ color }) => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+    <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+    <circle cx="9" cy="16" r="2" />
+    <path d="M15 14h2v4h-2z" />
   </svg>
 );
 
@@ -1302,6 +1313,7 @@ function AppInner() {
     { key: "bookings",    label: "Student Bookings",          Icon: IconBookings },
     { key: "create",      label: "Create Assessments",        Icon: IconCreate },
     { key: "invited",     label: "Invited Students",          Icon: IconInvited },
+    { key: "interviews",  label: "Interview Schedule",        Icon: IconInterviews },
     ...((userProfile?.role === "admin" || userProfile?.role === "super-admin") ? [{ key: "admin", label: "Admin Panel", Icon: IconAdmin }] : []),
   ];
 
@@ -1569,6 +1581,10 @@ function AppInner() {
             examSessions={examSessions}
             showToast={showToast}
           />
+        )}
+
+        {page === "interviews" && (
+          <InterviewerView S={S} showToast={showToast} />
         )}
 
         {page === "admin" && (
