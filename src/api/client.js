@@ -2,14 +2,34 @@ import { auth } from "../firebase";
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
+// ── In-memory GET cache (TTL: 60 seconds) ────────────────────────────────────
+const _cache = new Map(); // path → { data, ts }
+const CACHE_TTL = 60_000;
+
+export function invalidateCache(path) {
+  if (path) {
+    // invalidate exact path and any path starting with it
+    for (const key of _cache.keys()) {
+      if (key === path || key.startsWith(path)) _cache.delete(key);
+    }
+  } else {
+    _cache.clear();
+  }
+}
+
 async function getToken() {
   const user = auth.currentUser;
   if (!user) return null;
-  // Force refresh if within 5 minutes of expiry
   return user.getIdToken();
 }
 
 async function request(method, path, body) {
+  // Return cached data for GET requests within TTL
+  if (method === "GET") {
+    const cached = _cache.get(path);
+    if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+  }
+
   const token = await getToken();
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -22,14 +42,18 @@ async function request(method, path, body) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+  // Store successful GET responses in cache
+  if (method === "GET") _cache.set(path, { data, ts: Date.now() });
+
   return data;
 }
 
 export const api = {
-  get:    (path)        => request("GET",    path),
-  post:   (path, body)  => request("POST",   path, body),
-  put:    (path, body)  => request("PUT",    path, body),
-  delete: (path)        => request("DELETE", path),
+  get:    (path)       => request("GET",    path),
+  post:   (path, body) => request("POST",   path, body),
+  put:    (path, body) => request("PUT",    path, body),
+  delete: (path)       => request("DELETE", path),
 };
 
 // SSE helper — returns an EventSource pointed at the backend

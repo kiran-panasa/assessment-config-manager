@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-import { api } from "./api/client";
+import { api, invalidateCache } from "./api/client";
 
 const PAGE_SIZE = 20;
 
@@ -147,6 +147,7 @@ export default function InterviewerView({ S, showToast }) {
     setUploading(true);
     try {
       await api.post("/api/interviews/bulk", { rows: csvData });
+      invalidateCache("/api/interviews");
       showToast(`${csvData.length} interview${csvData.length !== 1 ? "s" : ""} uploaded.`);
       setCsvData(null);
       load();
