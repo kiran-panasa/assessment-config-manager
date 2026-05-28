@@ -19,7 +19,7 @@ function deriveUserLink(assessmentLink) {
 const COLS = [
   "Student Name", "NIAT ID", "Student UID", "Skill", "Level",
   "Contest Date", "Time Slot", "Unique Exam ID", "Invite",
-  "User Assessment Link", "Config Link", "Details Link",
+  "User Assessment Link", "TinyURL", "Config Link", "Details Link",
 ];
 
 export default function InvitedStudents({ S, showToast }) {
@@ -58,8 +58,8 @@ export default function InvitedStudents({ S, showToast }) {
       return {
         ...row,
         uniqueExamId: s?.uniqueExamId ?? "—",
-        userAssessmentLink: s?.tinyUrl || (s?.assessmentLink ? deriveUserLink(s.assessmentLink) : null),
-        isTinyUrl: !!s?.tinyUrl,
+        userAssessmentLink: s?.assessmentLink ? deriveUserLink(s.assessmentLink) : null,
+        tinyUrl: s?.tinyUrl ?? null,
         viewAssessmentUrl: s?.viewAssessmentUrl ?? null,
         viewDetailsUrl: s?.viewDetailsUrl ?? null,
         mapped: !!s,
@@ -118,7 +118,7 @@ export default function InvitedStudents({ S, showToast }) {
   };
 
   const downloadCSV = () => {
-    const headers = ["Student Name", "NIAT ID", "Student UID", "Skill", "Level", "Contest Date", "Time Slot", "Unique Exam ID", "Invite Status", "User Assessment Link", "Config Link", "Details Link"];
+    const headers = ["Student Name", "NIAT ID", "Student UID", "Skill", "Level", "Contest Date", "Time Slot", "Unique Exam ID", "Invite Status", "User Assessment Link", "TinyURL", "Config Link", "Details Link"];
     const escape = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const csvRows = [
       headers.map(escape).join(","),
@@ -126,7 +126,7 @@ export default function InvitedStudents({ S, showToast }) {
         r.studentName, r.niatId, r.studentUid, r.skill, r.skillLevel,
         r.contestDate, r.timeSlot, r.uniqueExamId,
         r.inviteStatus === "sent" ? "Sent" : r.inviteStatus === "failed" ? "Failed" : "Not Sent",
-        r.userAssessmentLink ?? "", r.viewAssessmentUrl ?? "", r.viewDetailsUrl ?? "",
+        r.userAssessmentLink ?? "", r.tinyUrl ?? "", r.viewAssessmentUrl ?? "", r.viewDetailsUrl ?? "",
       ].map(escape).join(",")),
     ];
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
@@ -253,19 +253,30 @@ export default function InvitedStudents({ S, showToast }) {
                             ? <span style={S.badge("#ff5555")}>Failed</span>
                             : <span style={S.badge("#94a3b8")}>Not Sent</span>}
                         </td>
-                        <td style={{ ...S.td, maxWidth: 280 }}>
+                        <td style={{ ...S.td, maxWidth: 260 }}>
                           {row.userAssessmentLink ? (
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                                {row.isTinyUrl && (
-                                  <span style={{ fontSize: 9, fontFamily: "'Inter', sans-serif", fontWeight: 700, color: "#7c3aed", background: "#f3e8ff", borderRadius: 3, padding: "1px 5px", width: "fit-content", letterSpacing: "0.05em" }}>TINY</span>
-                                )}
-                                <a href={row.userAssessmentLink} target="_blank" rel="noreferrer"
-                                  style={{ color: "#00c896", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 190, display: "inline-block" }}>
-                                  {row.userAssessmentLink.length > 42 ? row.userAssessmentLink.slice(0, 42) + "…" : row.userAssessmentLink}
-                                </a>
-                              </div>
+                              <a href={row.userAssessmentLink} target="_blank" rel="noreferrer"
+                                style={{ color: "#00c896", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 190, display: "inline-block" }}>
+                                {row.userAssessmentLink.length > 42 ? row.userAssessmentLink.slice(0, 42) + "…" : row.userAssessmentLink}
+                              </a>
                               <button onClick={() => copyLink(row.userAssessmentLink)}
+                                style={{ ...S.btn("secondary"), padding: "3px 10px", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>
+                                Copy
+                              </button>
+                            </div>
+                          ) : (
+                            <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ ...S.td, maxWidth: 180 }}>
+                          {row.tinyUrl ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <a href={row.tinyUrl} target="_blank" rel="noreferrer"
+                                style={{ color: "#7c3aed", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap" }}>
+                                {row.tinyUrl.replace("https://", "")}
+                              </a>
+                              <button onClick={() => copyLink(row.tinyUrl)}
                                 style={{ ...S.btn("secondary"), padding: "3px 10px", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>
                                 Copy
                               </button>
