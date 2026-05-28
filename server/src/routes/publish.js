@@ -175,6 +175,30 @@ async function setExitPin(page, exitPin) {
   await exitInput.fill(exitPin);
 }
 
+// ── TinyURL helper ────────────────────────────────────────────────────────────
+
+async function createTinyUrl(longUrl) {
+  const token = process.env.TINYURL_API_TOKEN;
+  if (!token) return null;
+  try {
+    const res = await fetch("https://api.tinyurl.com/create", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ url: longUrl, domain: "tinyurl.com" }),
+    });
+    const data = await res.json();
+    return data?.data?.tiny_url || null;
+  } catch { return null; }
+}
+
+function deriveUserUrl(assessmentLink) {
+  try {
+    const u = new URL(assessmentLink);
+    u.searchParams.delete("a_t");
+    return u.toString();
+  } catch { return assessmentLink; }
+}
+
 // ── Publish one session ───────────────────────────────────────────────────────
 
 async function publishOneSession(page, session, assessments) {
@@ -263,7 +287,12 @@ async function publishOneSession(page, session, assessments) {
   catch { assessmentId = assessmentLink.match(/org_id=([0-9a-f-]{36})/i)?.[1] || null; }
   if (!assessmentId) throw new Error(`Could not extract org_id from: ${assessmentLink}`);
 
-  return { assessmentId, assessmentLink, viewAssessmentUrl, viewDetailsUrl };
+  const userUrl = deriveUserUrl(assessmentLink);
+  const tinyUrl = await createTinyUrl(userUrl);
+  if (tinyUrl) broadcast("info", `  TinyURL: ${tinyUrl}`);
+  else broadcast("info", "  TinyURL: skipped (token not set or API error)");
+
+  return { assessmentId, assessmentLink, viewAssessmentUrl, viewDetailsUrl, tinyUrl };
 }
 
 // ── Topin login ───────────────────────────────────────────────────────────────
@@ -379,10 +408,11 @@ async function runPublish(mobile, otp, date) {
       const num = passed + failed + 1;
       broadcast("info", `\n[${num}/${sessions.length}] ${session.assessmentTitle} — ${session.dateOfAssessment} ${session.startTimeSlot}`);
       try {
-        const { assessmentId, assessmentLink, viewAssessmentUrl, viewDetailsUrl } = await publishOneSession(page, session, assessments);
+        const { assessmentId, assessmentLink, viewAssessmentUrl, viewDetailsUrl, tinyUrl } = await publishOneSession(page, session, assessments);
         await db.collection("examSessions").doc(session.id).update({
           topinAssessmentId: assessmentId, assessmentLink,
           viewAssessmentUrl, viewDetailsUrl,
+          tinyUrl: tinyUrl || null,
           publishStatus: "published", publishedAt: new Date().toISOString(),
         });
         broadcast("success", `  Assessment ID: ${assessmentId}`);

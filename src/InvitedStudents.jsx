@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { api } from "./api/client";
+import { api, invalidateCache } from "./api/client";
 
 const PAGE_SIZE = 20;
 
@@ -26,6 +26,7 @@ export default function InvitedStudents({ S, showToast }) {
   const [bookingRows, setBookingRows] = useState([]);
   const [examSessions, setExamSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [generatingTiny, setGeneratingTiny] = useState(false);
   const [filters, setFilters] = useState(FILTER_INIT);
   const [search, setSearch] = useState("");
   const [pg, setPg] = useState(1);
@@ -57,7 +58,8 @@ export default function InvitedStudents({ S, showToast }) {
       return {
         ...row,
         uniqueExamId: s?.uniqueExamId ?? "—",
-        userAssessmentLink: s?.assessmentLink ? deriveUserLink(s.assessmentLink) : null,
+        userAssessmentLink: s?.tinyUrl || (s?.assessmentLink ? deriveUserLink(s.assessmentLink) : null),
+        isTinyUrl: !!s?.tinyUrl,
         viewAssessmentUrl: s?.viewAssessmentUrl ?? null,
         viewDetailsUrl: s?.viewDetailsUrl ?? null,
         mapped: !!s,
@@ -97,6 +99,19 @@ export default function InvitedStudents({ S, showToast }) {
   const setFilter = (key, val) => { setFilters(f => ({ ...f, [key]: val })); setPg(1); };
   const resetFilters = () => { setFilters(FILTER_INIT); setSearch(""); setPg(1); };
   const anyActive = Object.values(filters).some(v => v !== "All") || search.trim() !== "";
+
+  const handleGenerateTinyUrls = useCallback(async () => {
+    setGeneratingTiny(true);
+    try {
+      const res = await api.post("/api/sessions/tiny-urls", {});
+      invalidateCache("/api/sessions");
+      showToast(`TinyURLs: ${res.updated} generated, ${res.skipped} already done, ${res.failed} failed.`);
+      await load();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+    setGeneratingTiny(false);
+  }, [load]);
 
   const copyLink = (link) => {
     navigator.clipboard.writeText(link).then(() => showToast("Link copied!")).catch(() => showToast("Copy failed.", "error"));
@@ -141,6 +156,10 @@ export default function InvitedStudents({ S, showToast }) {
           </span>
           <button onClick={load} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>
             Refresh
+          </button>
+          <button onClick={handleGenerateTinyUrls} disabled={generatingTiny}
+            style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap", opacity: generatingTiny ? 0.5 : 1 }}>
+            {generatingTiny ? "Generating…" : "Generate TinyURLs"}
           </button>
           {filtered.length > 0 && (
             <button onClick={downloadCSV} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>
@@ -237,10 +256,15 @@ export default function InvitedStudents({ S, showToast }) {
                         <td style={{ ...S.td, maxWidth: 280 }}>
                           {row.userAssessmentLink ? (
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <a href={row.userAssessmentLink} target="_blank" rel="noreferrer"
-                                style={{ color: "#00c896", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 190, display: "inline-block" }}>
-                                {row.userAssessmentLink.length > 42 ? row.userAssessmentLink.slice(0, 42) + "…" : row.userAssessmentLink}
-                              </a>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                                {row.isTinyUrl && (
+                                  <span style={{ fontSize: 9, fontFamily: "'Inter', sans-serif", fontWeight: 700, color: "#7c3aed", background: "#f3e8ff", borderRadius: 3, padding: "1px 5px", width: "fit-content", letterSpacing: "0.05em" }}>TINY</span>
+                                )}
+                                <a href={row.userAssessmentLink} target="_blank" rel="noreferrer"
+                                  style={{ color: "#00c896", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 190, display: "inline-block" }}>
+                                  {row.userAssessmentLink.length > 42 ? row.userAssessmentLink.slice(0, 42) + "…" : row.userAssessmentLink}
+                                </a>
+                              </div>
                               <button onClick={() => copyLink(row.userAssessmentLink)}
                                 style={{ ...S.btn("secondary"), padding: "3px 10px", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>
                                 Copy

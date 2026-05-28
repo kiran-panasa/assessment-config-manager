@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../firebase.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -44,6 +44,40 @@ router.post("/bulk-delete", async (req, res) => {
       await batch.commit();
     }
     res.json({ ok: true, count: ids.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Batch-generate TinyURLs for published sessions that don't have one yet
+router.post("/tiny-urls", requireAdmin, async (req, res) => {
+  const token = process.env.TINYURL_API_TOKEN;
+  if (!token) return res.status(500).json({ error: "TINYURL_API_TOKEN not configured on server" });
+
+  try {
+    const snap = await db.collection("examSessions")
+      .where("publishStatus", "==", "published")
+      .get();
+
+    const missing = snap.docs.filter(d => !d.data().tinyUrl && d.data().assessmentLink);
+
+    let updated = 0, failed = 0;
+    for (const doc of missing) {
+      let userUrl = doc.data().assessmentLink;
+      try { const u = new URL(userUrl); u.searchParams.delete("a_t"); userUrl = u.toString(); } catch {}
+      try {
+        const r = await fetch("https://api.tinyurl.com/create", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ url: userUrl, domain: "tinyurl.com" }),
+        });
+        const data = await r.json();
+        const tinyUrl = data?.data?.tiny_url;
+        if (tinyUrl) { await doc.ref.update({ tinyUrl }); updated++; }
+        else failed++;
+      } catch { failed++; }
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    res.json({ ok: true, updated, failed, skipped: snap.docs.length - missing.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
