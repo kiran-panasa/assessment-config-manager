@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { api } from "./api/client";
 
 const PAGE_SIZE = 20;
 
@@ -21,10 +22,28 @@ const COLS = [
   "User Assessment Link", "Config Link", "Details Link",
 ];
 
-export default function InvitedStudents({ S, bookingRows, examSessions, showToast }) {
+export default function InvitedStudents({ S, showToast }) {
+  const [bookingRows, setBookingRows] = useState([]);
+  const [examSessions, setExamSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(FILTER_INIT);
   const [search, setSearch] = useState("");
   const [pg, setPg] = useState(1);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [bookings, sessions] = await Promise.all([
+        api.get("/api/bookings"),
+        api.get("/api/sessions"),
+      ]);
+      setBookingRows(bookings || []);
+      setExamSessions(sessions || []);
+    } catch { /* silent */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const sessionMap = useMemo(() => {
     const m = new Map();
@@ -106,6 +125,12 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
 
   const selStyle = { ...S.select, width: "auto", minWidth: 120 };
 
+  if (loading) return (
+    <div style={{ padding: "80px 48px", color: "#94a3b8", fontFamily: "'Inter', sans-serif", fontSize: 14 }}>
+      Loading…
+    </div>
+  );
+
   return (
     <div style={{ animation: "fadeIn 0.2s ease" }}>
       <div style={S.header}>
@@ -114,6 +139,9 @@ export default function InvitedStudents({ S, bookingRows, examSessions, showToas
           <span style={{ fontSize: 12, color: "#94a3b8" }}>
             {filtered.length !== rows.length ? `${filtered.length} of ${rows.length} students` : `${rows.length} students`}
           </span>
+          <button onClick={load} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>
+            Refresh
+          </button>
           {filtered.length > 0 && (
             <button onClick={downloadCSV} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>
               Download CSV

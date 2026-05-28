@@ -1,10 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-import { db } from "./firebase";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-import {
-  collection, query, where, onSnapshot,
-  doc, writeBatch, serverTimestamp,
-} from "firebase/firestore";
+import { api } from "./api/client";
 
 const PAGE_SIZE = 20;
 
@@ -104,23 +100,20 @@ export default function InterviewerView({ S, showToast }) {
   const [uploading, setUploading]     = useState(false);
   const fileRef = useRef(null);
 
-  useEffect(() => {
-    const q = isAdmin
-      ? collection(db, "scheduledInterviews")
-      : query(collection(db, "scheduledInterviews"), where("panelistEmail", "==", currentUser.email.toLowerCase()));
-
-    const unsub = onSnapshot(q, snap => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) =>
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get("/api/interviews");
+      const sorted = (data || []).sort((a, b) =>
         (a.interviewDate || "").localeCompare(b.interviewDate || "") ||
         (a.interviewTime || "").localeCompare(b.interviewTime || "")
       );
-      setInterviews(data);
-      setLoading(false);
-    }, () => setLoading(false));
+      setInterviews(sorted);
+    } catch { /* silent */ }
+    setLoading(false);
+  }, []);
 
-    return () => unsub();
-  }, [isAdmin, currentUser.email]);
+  useEffect(() => { load(); }, [load]);
 
   const dates = useMemo(() =>
     [...new Set(interviews.map(r => r.interviewDate))].filter(Boolean).sort(),
@@ -153,13 +146,10 @@ export default function InterviewerView({ S, showToast }) {
     if (!csvData?.length) return;
     setUploading(true);
     try {
-      const batch = writeBatch(db);
-      csvData.forEach(row => {
-        batch.set(doc(collection(db, "scheduledInterviews")), { ...row, uploadedAt: serverTimestamp() });
-      });
-      await batch.commit();
+      await api.post("/api/interviews/bulk", { rows: csvData });
       showToast(`${csvData.length} interview${csvData.length !== 1 ? "s" : ""} uploaded.`);
       setCsvData(null);
+      load();
     } catch (err) {
       showToast("Upload failed: " + err.message, "error");
     }
@@ -262,10 +252,13 @@ export default function InterviewerView({ S, showToast }) {
             ))}
           </nav>
         )}
-        <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, fontSize: 12, color: "#94a3b8" }}>
-          {filtered.length !== interviews.length
-            ? `${filtered.length} of ${interviews.length} interviews`
-            : `${interviews.length} interview${interviews.length !== 1 ? "s" : ""}`}
+        <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18, display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 12, color: "#94a3b8" }}>
+            {filtered.length !== interviews.length
+              ? `${filtered.length} of ${interviews.length} interviews`
+              : `${interviews.length} interview${interviews.length !== 1 ? "s" : ""}`}
+          </span>
+          <button onClick={load} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12 }}>Refresh</button>
         </div>
       </div>
 

@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { auth, db } from "./firebase";
+import { auth } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { BOOTSTRAP_EMAIL } from "./AuthContext";
+import { api } from "./api/client";
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -54,15 +53,10 @@ export default function LoginPage() {
     try {
       if (mode === "signup") {
         const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        const isBootstrap = email.trim().toLowerCase() === BOOTSTRAP_EMAIL.toLowerCase();
-        await setDoc(doc(db, "users", user.uid), {
+        await api.post("/api/users", {
+          uid: user.uid,
           email: user.email,
           displayName: name.trim() || email.split("@")[0],
-          role: isBootstrap ? "admin" : null,
-          status: isBootstrap ? "active" : "pending",
-          createdAt: serverTimestamp(),
-          approvedAt: isBootstrap ? serverTimestamp() : null,
-          approvedBy: isBootstrap ? "system" : null,
         });
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);

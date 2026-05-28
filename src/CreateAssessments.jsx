@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { db } from "./firebase";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { api, checkHealth, progressStream } from "./api/client";
 
 
 const LOG_COLOR = {
@@ -12,7 +11,7 @@ const LOG_COLOR = {
   done:    "#00c896",
 };
 
-export default function CreateAssessments({ S, examSessions, bookingRows, showToast }) {
+export default function CreateAssessments({ S, showToast }) {
   const { allowedPages } = useAuth();
   const canViewCredentials = allowedPages.includes("credentials");
   const [tab, setTab] = useState("run");
@@ -21,12 +20,13 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
   const [creds, setCreds] = useState({
     mobile: "", otp: "",
     apiEndpoint: "", apiToken: "",
-    serverUrl: "http://localhost:3001",
-    serverSecret: "",
     topinLoginUrl: "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp",
   });
   const [credsSaved, setCredsSaved] = useState(false);
   const [credsLoaded, setCredsLoaded] = useState(false);
+
+  const [examSessions, setExamSessions] = useState([]);
+  const [bookingRows, setBookingRows] = useState([]);
 
   const [selDate, setSelDate] = useState("");
   const [running, setRunning] = useState(null);
@@ -35,47 +35,76 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
   const logsEndRef = useRef(null);
   const esRef = useRef(null);
 
-  // Load credentials from Firestore
+  // Load credentials and data from API
   useEffect(() => {
-    getDoc(doc(db, "settings", "automation")).then(snap => {
-      if (snap.exists()) setCreds(prev => ({ ...prev, ...snap.data() }));
-      setCredsLoaded(true);
-    }).catch(() => setCredsLoaded(true));
-  }, []);
+    api.get("/api/settings")
+      .then(data => {
+        if (data) setCreds(prev => ({ ...prev, ...data }));
+        setCredsLoaded(true);
+      })
+      .catch(() => setCredsLoaded(true));
 
+    Promise.all([
+      api.get("/api/sessions").catch(() => []),
+      api.get("/api/bookings").catch(() => []),
+    ]).then(([sessions, bookings]) => {
+      setExamSessions(sessions || []);
+      setBookingRows(bookings || []);
+    });
+  }, []);
 
   // Redirect away from credentials tab if permission is revoked mid-session
   useEffect(() => {
     if (tab === "credentials" && !canViewCredentials) setTab("run");
   }, [canViewCredentials, tab]);
 
-  // Server health check — restarts whenever serverUrl changes
+  const startSSE = useCallback(() => {
+    if (esRef.current) esRef.current.close();
+    const start = Date.now();
+    setRunStartTs(start);
+    const es = progressStream();
+    esRef.current = es;
+    es.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      setLogs(prev => [...prev, { type: data.type, message: data.message, ts: data.ts || Date.now(), id: (data.ts || Date.now()) + Math.random() }]);
+      if (data.type === "done") {
+        setRunning(null);
+        es.close();
+        esRef.current = null;
+        showToast(data.message);
+      }
+    };
+    es.onerror = () => {
+      setLogs(prev => [...prev, { type: "error", message: "Lost connection to server.", ts: Date.now(), id: Date.now() + Math.random() }]);
+      setRunning(null);
+      es.close();
+      esRef.current = null;
+    };
+  }, [showToast]);
+
+  // Server health check
   useEffect(() => {
-    if (!credsLoaded || !creds.serverUrl) return;
+    if (!credsLoaded) return;
     setServerOnline(null);
-    const headers = creds.serverSecret ? { "x-server-token": creds.serverSecret } : {};
 
-    const check = () =>
-      fetch(`${creds.serverUrl}/health`, { signal: AbortSignal.timeout(3000), headers })
-        .then(r => setServerOnline(r.ok))
-        .catch(() => setServerOnline(false));
+    const check = () => checkHealth()
+      .then(ok => setServerOnline(ok))
+      .catch(() => setServerOnline(false));
 
-    const checkJobStatus = () =>
-      fetch(`${creds.serverUrl}/status`, { signal: AbortSignal.timeout(5000), headers })
-        .then(r => r.json())
-        .then(data => {
-          if (data.jobRunning && !esRef.current) {
-            setRunning("publish");
-            startSSE();
-          }
-        })
-        .catch(() => {});
+    const checkJobStatus = () => api.get("/api/publish/status")
+      .then(data => {
+        if (data.jobRunning && !esRef.current) {
+          setRunning("publish");
+          startSSE();
+        }
+      })
+      .catch(() => {});
 
     check();
     checkJobStatus();
     const id = setInterval(check, 5000);
     return () => clearInterval(id);
-  }, [creds.serverUrl, creds.serverSecret, credsLoaded]);
+  }, [credsLoaded, startSSE]);
 
   // Scroll progress log to bottom
   useEffect(() => {
@@ -85,7 +114,7 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
 
   const saveCreds = async () => {
     try {
-      await setDoc(doc(db, "settings", "automation"), creds, { merge: true });
+      await api.put("/api/settings", creds);
       setCredsSaved(true);
       showToast("Credentials saved.");
       setTimeout(() => setCredsSaved(false), 2000);
@@ -112,92 +141,48 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
   const addLog = (type, message, ts = Date.now()) =>
     setLogs(prev => [...prev, { type, message, ts, id: ts + Math.random() }]);
 
-  const startSSE = () => {
-    if (esRef.current) esRef.current.close();
-    const start = Date.now();
-    setRunStartTs(start);
-    const es = new EventSource(`${creds.serverUrl}/progress`);
-    esRef.current = es;
-    es.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      addLog(data.type, data.message, data.ts || Date.now());
-      if (data.type === "done") {
-        setRunning(null);
-        es.close();
-        esRef.current = null;
-        showToast(data.message);
-      }
-    };
-    es.onerror = () => {
-      addLog("error", "Lost connection to server.");
-      setRunning(null);
-      es.close();
-      esRef.current = null;
-    };
-  };
-
   const handlePublish = async () => {
-    if (!serverOnline) { showToast("Server offline. Check the Server URL in Credentials.", "error"); return; }
+    if (!serverOnline) { showToast("Server offline.", "error"); return; }
     if (!creds.mobile || !creds.otp) { showToast("Enter Topin mobile and OTP in Credentials tab first.", "error"); return; }
     setLogs([]);
     setRunning("publish");
     startSSE();
     try {
-      const res = await fetch(`${creds.serverUrl}/publish`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(creds.serverSecret ? { "x-server-token": creds.serverSecret } : {}) },
-        body: JSON.stringify({ mobile: creds.mobile, otp: creds.otp, date: selDate || null, topinLoginUrl: creds.topinLoginUrl || null }),
+      await api.post("/api/publish/run", {
+        mobile: creds.mobile, otp: creds.otp,
+        date: selDate || null,
+        topinLoginUrl: creds.topinLoginUrl || null,
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        const msg = data.error || `Server error (${res.status})`;
-        addLog("error", msg);
-        setRunning(null);
-        if (esRef.current) { esRef.current.close(); esRef.current = null; }
-      }
-    } catch {
-      addLog("error", "Failed to reach server.");
+    } catch (err) {
+      addLog("error", err.message || "Server error");
       setRunning(null);
+      if (esRef.current) { esRef.current.close(); esRef.current = null; }
     }
   };
 
   const handleInvite = async () => {
-    if (!serverOnline) { showToast("Server offline. Check the Server URL in Credentials.", "error"); return; }
+    if (!serverOnline) { showToast("Server offline.", "error"); return; }
     if (!creds.apiEndpoint || !creds.apiToken) { showToast("Enter Invite API credentials first.", "error"); return; }
     setLogs([]);
     setRunning("invite");
     startSSE();
     try {
-      const res = await fetch(`${creds.serverUrl}/invite`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(creds.serverSecret ? { "x-server-token": creds.serverSecret } : {}) },
-        body: JSON.stringify({ apiEndpoint: creds.apiEndpoint, apiToken: creds.apiToken, date: selDate || null }),
+      await api.post("/api/publish/invite", {
+        apiEndpoint: creds.apiEndpoint, apiToken: creds.apiToken,
+        date: selDate || null,
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        const msg = data.error || `Server error (${res.status})`;
-        addLog("error", msg);
-        setRunning(null);
-        if (esRef.current) { esRef.current.close(); esRef.current = null; }
-      }
-    } catch {
-      addLog("error", "Failed to reach server.");
+    } catch (err) {
+      addLog("error", err.message || "Server error");
       setRunning(null);
+      if (esRef.current) { esRef.current.close(); esRef.current = null; }
     }
   };
 
   const cancelJob = async () => {
-    try {
-      await fetch(`${creds.serverUrl}/cancel`, {
-        method: "POST",
-        headers: creds.serverSecret ? { "x-server-token": creds.serverSecret } : {},
-      });
-    } catch { /* best-effort */ }
+    try { await api.post("/api/publish/cancel"); } catch { /* best-effort */ }
     setRunning(null);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
   };
-
-  const currentMonth = new Date().toLocaleString("default", { month: "long", year: "numeric" });
 
   return (
     <div style={{ animation: "fadeIn 0.2s ease" }}>
@@ -226,39 +211,15 @@ export default function CreateAssessments({ S, examSessions, bookingRows, showTo
         {serverOnline === false && (
           <div style={{ marginBottom: 24, padding: "16px 20px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 12, color: "#dc2626", lineHeight: 1.9 }}>
             <strong style={{ color: "#dc2626" }}>Server is not reachable.</strong>{" "}
-            Start it locally: <code style={{ background: "#1e293b", padding: "2px 8px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>cd scripts &amp;&amp; node --env-file=.env server.js</code>
+            Check that the backend is deployed and the <code style={{ background: "#1e293b", padding: "2px 8px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>VITE_API_URL</code> environment variable is set correctly.
           </div>
         )}
 
         {/* ── CREDENTIALS TAB ── */}
         {tab === "credentials" && (
           <div style={{ animation: "fadeIn 0.2s ease" }}>
-            <div style={S.sectionTitle}>Credentials & Server</div>
+            <div style={S.sectionTitle}>Credentials</div>
             <div style={S.sectionSub}>All values are saved to Firestore and auto-loaded on every device.</div>
-
-            {/* Server URL */}
-            <div style={S.card}>
-              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>Automation Server</div>
-              <label style={S.label}>Server URL</label>
-              <input style={S.input} type="url"
-                placeholder="http://localhost:3001"
-                value={creds.serverUrl}
-                onChange={e => setCreds(p => ({ ...p, serverUrl: e.target.value.trim() }))} />
-              <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
-                Run locally with: <code style={{ color: "#3b82f6" }}>cd scripts &amp;&amp; node --env-file=.env server.js</code>
-              </div>
-              <div style={{ marginTop: 18 }}>
-                <label style={S.label}>Server Secret</label>
-                <input style={S.input} type="password"
-                  placeholder="Must match SERVER_SECRET in scripts/.env"
-                  value={creds.serverSecret}
-                  onChange={e => setCreds(p => ({ ...p, serverSecret: e.target.value }))} />
-                <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
-                  Must match <code style={{ color: "#3b82f6" }}>SERVER_SECRET</code> in <code style={{ color: "#3b82f6" }}>scripts/.env</code>.
-                  Requests without a matching token will be rejected with 401.
-                </div>
-              </div>
-            </div>
 
             {/* Topin login */}
             <div style={S.card}>

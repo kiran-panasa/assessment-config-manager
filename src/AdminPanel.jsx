@@ -1,10 +1,6 @@
-import { useState, useEffect } from "react";
-import { db } from "./firebase";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-import {
-  collection, onSnapshot, doc, updateDoc, setDoc,
-  deleteDoc, serverTimestamp, query, where,
-} from "firebase/firestore";
+import { api } from "./api/client";
 
 const ALL_PAGES = [
   { key: "assessments",  label: "Assessment Configurations" },
@@ -58,36 +54,30 @@ export default function AdminPanel({ S, showToast }) {
   const [newRolePages, setNewRolePages] = useState([]);
   const [saving, setSaving] = useState({});
 
-  useEffect(() => {
-    const unsubPending = onSnapshot(
-      query(collection(db, "users"), where("status", "==", "pending")),
-      snap => {
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        data.sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
-        setPendingUsers(data);
-      }
-    );
-    const unsubActive = onSnapshot(
-      query(collection(db, "users"), where("status", "==", "active")),
-      snap => {
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        data.sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
-        setActiveUsers(data);
-      }
-    );
-    const unsubRoles = onSnapshot(collection(db, "roles"), snap => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-      setRoles(data);
-    });
-    return () => { unsubPending(); unsubActive(); unsubRoles(); };
+  const loadData = useCallback(async () => {
+    try {
+      const [usersData, rolesData] = await Promise.all([
+        api.get("/api/users"),
+        api.get("/api/roles"),
+      ]);
+      const sortByDate = (a, b) => {
+        const aMs = a.createdAt?._seconds ? a.createdAt._seconds * 1000 : new Date(a.createdAt || 0).getTime();
+        const bMs = b.createdAt?._seconds ? b.createdAt._seconds * 1000 : new Date(b.createdAt || 0).getTime();
+        return aMs - bMs;
+      };
+      setPendingUsers((usersData || []).filter(u => u.status === "pending").sort(sortByDate));
+      setActiveUsers((usersData || []).filter(u => u.status === "active").sort(sortByDate));
+      setRoles((rolesData || []).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")));
+    } catch { /* silent */ }
   }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const roleOptions = roles.map(r => ({ value: r.key, label: r.name }));
 
   const fmtDate = (ts) => {
     if (!ts) return "—";
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    const d = ts._seconds ? new Date(ts._seconds * 1000) : ts.toDate ? ts.toDate() : new Date(ts);
     return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   };
 
@@ -98,12 +88,10 @@ export default function AdminPanel({ S, showToast }) {
     if (!role) { showToast("Select a role first.", "error"); return; }
     setSavingKey(user.id, true);
     try {
-      await updateDoc(doc(db, "users", user.id), {
-        role, status: "active",
-        approvedAt: serverTimestamp(), approvedBy: currentUser.uid,
-      });
+      await api.put(`/api/users/${user.id}`, { role, status: "active", approvedBy: currentUser.uid });
       showToast(`${user.email} approved.`);
       setPendingRoleMap(m => { const n = { ...m }; delete n[user.id]; return n; });
+      loadData();
     } catch { showToast("Failed to approve.", "error"); }
     setSavingKey(user.id, false);
   };
@@ -121,9 +109,10 @@ export default function AdminPanel({ S, showToast }) {
     if (!window.confirm(`Change role for ${user.email} to "${roleName}"?`)) return;
     setSavingKey(user.id, true);
     try {
-      await updateDoc(doc(db, "users", user.id), { role: newRole });
+      await api.put(`/api/users/${user.id}`, { role: newRole });
       showToast(`Role updated for ${user.email}.`);
       setUserRoleMap(m => { const n = { ...m }; delete n[user.id]; return n; });
+      loadData();
     } catch { showToast("Failed to update role.", "error"); }
     setSavingKey(user.id, false);
   };
@@ -135,8 +124,9 @@ export default function AdminPanel({ S, showToast }) {
     if (!window.confirm(`Revoke access for ${user.email}? They will be moved back to Pending.`)) return;
     setSavingKey(user.id + "_revoke", true);
     try {
-      await updateDoc(doc(db, "users", user.id), { status: "pending", role: null });
+      await api.put(`/api/users/${user.id}`, { status: "pending", role: null });
       showToast(`Access revoked for ${user.email}.`);
+      loadData();
     } catch { showToast("Failed to revoke access.", "error"); }
     setSavingKey(user.id + "_revoke", false);
   };
@@ -145,8 +135,9 @@ export default function AdminPanel({ S, showToast }) {
     if (!window.confirm(`Permanently delete ${user.email}? Their app profile will be removed. This cannot be undone.`)) return;
     setSavingKey(user.id + "_delete", true);
     try {
-      await deleteDoc(doc(db, "users", user.id));
+      await api.delete(`/api/users/${user.id}`);
       showToast(`${user.email} deleted.`);
+      loadData();
     } catch { showToast("Failed to delete user.", "error"); }
     setSavingKey(user.id + "_delete", false);
   };
@@ -156,7 +147,8 @@ export default function AdminPanel({ S, showToast }) {
       ? currentPages.filter(p => p !== pageKey)
       : [...currentPages, pageKey];
     try {
-      await updateDoc(doc(db, "roles", roleId), { pages: newPages });
+      await api.put(`/api/roles/${roleId}`, { pages: newPages });
+      loadData();
     } catch { showToast("Failed to update access.", "error"); }
   };
 
@@ -166,9 +158,10 @@ export default function AdminPanel({ S, showToast }) {
     const key = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
     if (roles.find(r => r.key === key)) { showToast("A role with this name already exists.", "error"); return; }
     try {
-      await setDoc(doc(db, "roles", key), { key, name, pages: newRolePages, isSystem: false, createdAt: serverTimestamp() });
+      await api.post("/api/roles", { key, name, pages: newRolePages, isSystem: false });
       showToast(`Role "${name}" created.`);
       setNewRoleName(""); setNewRolePages([]);
+      loadData();
     } catch { showToast("Failed to create role.", "error"); }
   };
 
@@ -176,8 +169,9 @@ export default function AdminPanel({ S, showToast }) {
     const inUse = [...activeUsers, ...pendingUsers].some(u => u.role === role.key);
     if (inUse) { showToast("Cannot delete — users are assigned to this role.", "error"); return; }
     try {
-      await deleteDoc(doc(db, "roles", role.id));
+      await api.delete(`/api/roles/${role.id}`);
       showToast(`Role "${role.name}" deleted.`);
+      loadData();
     } catch { showToast("Failed to delete role.", "error"); }
   };
 
@@ -196,6 +190,9 @@ export default function AdminPanel({ S, showToast }) {
             </button>
           ))}
         </nav>
+        <button onClick={loadData} style={{ ...S.btn("secondary"), marginLeft: "auto", padding: "6px 14px", fontSize: 12, marginBottom: 18, marginTop: 18 }}>
+          Refresh
+        </button>
       </div>
 
       <div style={S.body}>
