@@ -79,6 +79,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Interview Schedule ────────────────────────────────────────────────────
+    match /scheduledInterviews/{id} {
+      // Admins can read all and write (upload schedule)
+      allow read, write: if isAdmin();
+      // Interviewers can only read rows where panelistEmail matches their email
+      allow read: if isActive()
+        && resource.data.panelistEmail == request.auth.token.email.lower();
+    }
+
     // ── Activity logs ─────────────────────────────────────────────────────────
     match /logs/{id} {
       allow create: if isActive();
