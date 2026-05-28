@@ -56,18 +56,20 @@ export default function AdminPanel({ S, showToast }) {
 
   const loadData = useCallback(async () => {
     try {
-      const [usersData, rolesData] = await Promise.all([
+      const [usersRes, rolesRes] = await Promise.all([
         api.get("/api/users"),
         api.get("/api/roles"),
       ]);
+      const usersData = usersRes.users || [];
+      const rolesData = rolesRes.roles || [];
       const sortByDate = (a, b) => {
         const aMs = a.createdAt?._seconds ? a.createdAt._seconds * 1000 : new Date(a.createdAt || 0).getTime();
         const bMs = b.createdAt?._seconds ? b.createdAt._seconds * 1000 : new Date(b.createdAt || 0).getTime();
         return aMs - bMs;
       };
-      setPendingUsers((usersData || []).filter(u => u.status === "pending").sort(sortByDate));
-      setActiveUsers((usersData || []).filter(u => u.status === "active").sort(sortByDate));
-      setRoles((rolesData || []).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")));
+      setPendingUsers(usersData.filter(u => u.status === "pending").sort(sortByDate));
+      setActiveUsers(usersData.filter(u => u.status === "active").sort(sortByDate));
+      setRoles(rolesData.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")));
     } catch { /* silent */ }
   }, []);
 
