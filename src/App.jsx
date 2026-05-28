@@ -850,8 +850,20 @@ function AppShell() {
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 function AppContent() {
-  const { authLoading, currentUser, userProfile } = useAuth();
-  if (authLoading) return <div style={{ minHeight:"100vh",background:"#f0f4f8",display:"flex",alignItems:"center",justifyContent:"center" }}><style>{css}</style><span style={{ color:"#94a3b8",fontFamily:"'Inter',sans-serif",fontSize:14 }}>Loading…</span></div>;
+  const { authLoading, serverWaking, currentUser, userProfile } = useAuth();
+  if (authLoading) return (
+    <div style={{ minHeight:"100vh",background:"#f0f4f8",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12 }}>
+      <style>{css}</style>
+      <span style={{ color:"#94a3b8",fontFamily:"'Inter',sans-serif",fontSize:14 }}>
+        {serverWaking ? "Server is starting up…" : "Loading…"}
+      </span>
+      {serverWaking && (
+        <span style={{ color:"#cbd5e1",fontFamily:"'Inter',sans-serif",fontSize:12 }}>
+          This takes up to 20 seconds on first load
+        </span>
+      )}
+    </div>
+  );
   return (
     <Routes>
       <Route path="/login"   element={!currentUser ? <LoginPage /> : <Navigate to="/" replace />} />
