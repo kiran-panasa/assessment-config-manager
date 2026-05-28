@@ -1,9 +1,18 @@
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { auth } from "./firebase";
 import { signOut } from "firebase/auth";
 import { useAuth } from "./AuthContext";
 
 export default function PendingPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (userProfile?.status === "active") {
+      navigate("/", { replace: true });
+    }
+  }, [userProfile, navigate]);
 
   return (
     <div style={{
