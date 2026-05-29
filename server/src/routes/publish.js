@@ -3,15 +3,7 @@ import { chromium } from "playwright";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { db } from "../firebase.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import {
-  setupTokenCapture,
-  getValidTopinToken,
-  getTopinProfile,
-  publishSessionDirect,
-  findAssessmentByTag,
-  buildAssessmentLink,
-  buildViewUrls,
-} from "../lib/topinClient.js";
+import { setupTokenCapture } from "../lib/topinClient.js";
 
 const router = Router();
 
@@ -404,54 +396,6 @@ async function logJob(type, startMs, stats) {
 
 // ── Main publish loop ─────────────────────────────────────────────────────────
 
-async function runPublishDirect(accessToken, sessions, assessments, date) {
-  broadcast("info", "[DIRECT API] Publishing without browser…");
-  const { user_id, org_id } = await getTopinProfile(accessToken);
-
-  let passed = 0, failed = 0;
-  for (const session of sessions) {
-    if (cancelRequested) { broadcast("warn", "Cancelled."); break; }
-    const num = passed + failed + 1;
-    broadcast("info", `\n[${num}/${sessions.length}] ${session.assessmentTitle} — ${session.dateOfAssessment} ${session.startTimeSlot}`);
-
-    try {
-      const config = assessments.find(a => a.skill === session.skill && a.level === `L${session.level}`);
-      if (!config?.url) throw new Error(`No config URL for ${session.skill} - L${session.level}`);
-
-      broadcast("info", "  Calling Topin publish API…");
-      await publishSessionDirect(accessToken, session, config.url);
-
-      broadcast("info", `  Waiting for GraphQL confirmation (uniqueExamId: ${session.uniqueExamId})…`);
-      const result = await findAssessmentByTag(accessToken, user_id, org_id, session.uniqueExamId);
-
-      if (!result) throw new Error("Assessment not found in GraphQL after 30s — publish may have failed");
-
-      const assessmentId  = result.published_assess_id;
-      const assessmentLink = buildAssessmentLink(assessmentId);
-      const { viewAssessmentUrl, viewDetailsUrl } = buildViewUrls(result.id);
-
-      const userUrl = assessmentLink.replace(/[?&]a_t=CLIENT/g, "").replace(/\?$/, "");
-      const tinyUrl = await createTinyUrl(userUrl);
-      if (tinyUrl) broadcast("info", `  TinyURL: ${tinyUrl}`);
-
-      await db.collection("examSessions").doc(session.id).update({
-        topinAssessmentId: assessmentId, assessmentLink,
-        viewAssessmentUrl, viewDetailsUrl,
-        tinyUrl: tinyUrl || null,
-        publishStatus: "published", publishedAt: new Date().toISOString(),
-        publishError: null,
-      });
-      broadcast("success", `  Done — Assessment ID: ${assessmentId}`);
-      passed++;
-    } catch (err) {
-      broadcast("error", `  Failed: ${err.message}`);
-      await db.collection("examSessions").doc(session.id).update({ publishStatus: "failed", publishError: err.message }).catch(() => {});
-      failed++;
-    }
-  }
-  return { passed, failed };
-}
-
 async function runPublish(mobile, otp, date) {
   const startMs = Date.now();
   cancelRequested = false;
@@ -464,28 +408,7 @@ async function runPublish(mobile, otp, date) {
   }
   broadcast("info", `${sessions.length} unpublished session(s)${date ? ` for ${date}` : ""}`);
 
-  // ── Try direct API path first (no browser needed) ────────────────────────
-  const storedToken = await getValidTopinToken(broadcast);
-  if (storedToken) {
-    broadcast("info", "[AUTH] Using stored token — no browser required.");
-    let passed = 0, failed = 0;
-    try {
-      ({ passed, failed } = await runPublishDirect(storedToken, sessions, assessments, date));
-    } catch (err) {
-      broadcast("error", `Direct API fatal error: ${err.message}`);
-      broadcast("warn", "Falling back to browser mode…");
-      // fall through to Playwright below
-    }
-    if (passed + failed === sessions.length) {
-      await logJob("publish", startMs, { passed, failed, mode: "direct" });
-      broadcast("done", `Publish complete — ${passed} published, ${failed} failed`, { passed, failed });
-      return;
-    }
-  } else {
-    broadcast("info", "[AUTH] No stored token — launching browser for OTP login…");
-  }
-
-  // ── Playwright fallback (OTP login + browser automation) ─────────────────
+  // ── Playwright browser automation ─────────────────────────────────────────
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
   const isLinux   = process.platform === "linux";
   const isHeadless = process.env.HEADLESS !== "false";
