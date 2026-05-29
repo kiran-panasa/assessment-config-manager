@@ -74,7 +74,7 @@ async function saveSession(context) {
 async function tryRestoreSession(context, page) {
   if (!existsSync(COOKIES_FILE)) return false;
   try {
-    await page.goto("https://config.topin.tech", { waitUntil: "domcontentloaded", timeout: 20000 });
+    await page.goto("https://config.topin.tech", { waitUntil: "domcontentloaded", timeout: 60000 });
     const valid = page.url().includes("config.topin.tech") && !page.url().includes("accounts.ccbp.in");
     if (valid) { broadcast("success", "[SESSION] Restored saved session."); return true; }
     broadcast("info", "[SESSION] Saved session expired — falling back to OTP login.");
@@ -308,11 +308,11 @@ async function publishOneSession(page, session, assessments) {
 
 async function loginToTopin(page, mobile, otp) {
   broadcast("info", "Navigating to Topin…");
-  await page.goto("https://config.topin.tech/", { waitUntil: "domcontentloaded" });
+  await page.goto("https://config.topin.tech/", { waitUntil: "domcontentloaded", timeout: 90000 });
   await waitForPageSettled(page);
   if (!page.url().includes("accounts.ccbp.in/login")) {
     await page.context().clearCookies();
-    await page.goto("https://config.topin.tech/", { waitUntil: "domcontentloaded" });
+    await page.goto("https://config.topin.tech/", { waitUntil: "domcontentloaded", timeout: 90000 });
     await waitForPageSettled(page);
   }
   if (!page.url().includes("accounts.ccbp.in/login"))
@@ -481,7 +481,7 @@ async function runPublish(mobile, otp, date) {
 
   const page = await context.newPage();
   await page.addInitScript(() => { Object.defineProperty(navigator, "webdriver", { get: () => undefined }); });
-  page.setDefaultTimeout(30000);
+  page.setDefaultTimeout(60000);
 
   let passed = 0, failed = 0;
   try {
