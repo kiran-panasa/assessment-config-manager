@@ -266,24 +266,17 @@ async function publishOneSession(page, session, assessments) {
 
   await page.locator('input[placeholder="Enter Assessment Name"]').fill(session.assessmentTitle);
 
-  // Fix 4: replace existing tag rather than blindly appending
-  const existingTag = await page.evaluate(() => {
-    const chip = document.querySelector('[data-testid="bscd-assess-categories-input"] .Select__multi-value');
-    return chip ? (chip.textContent || "").trim() : null;
-  });
-  if (existingTag && existingTag !== session.uniqueExamId) {
-    await page.evaluate((tag) => {
-      const chips = Array.from(document.querySelectorAll('[data-testid="bscd-assess-categories-input"] .Select__multi-value'));
-      const chip = chips.find(n => (n.textContent || "").includes(tag));
-      const btn = chip?.querySelector(".Select__multi-value__remove");
-      if (btn) { btn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); btn.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
-    }, existingTag);
-    await page.waitForTimeout(200);
+  // Add uniqueExamId as a tag only if not already present — leave existing tags untouched
+  const alreadyTagged = await page.evaluate((target) => {
+    const chips = Array.from(document.querySelectorAll('[data-testid="bscd-assess-categories-input"] .Select__multi-value'));
+    return chips.some(c => (c.textContent || "").trim() === target);
+  }, session.uniqueExamId);
+  if (!alreadyTagged) {
+    const tagsInput = page.locator('[data-testid="bscd-assess-categories-input"] input').first();
+    await tagsInput.fill(session.uniqueExamId);
+    await tagsInput.press("Enter");
+    await page.waitForTimeout(300);
   }
-  const tagsInput = page.locator('[data-testid="bscd-assess-categories-input"] input').first();
-  await tagsInput.fill(session.uniqueExamId);
-  await tagsInput.press("Enter");
-  await page.waitForTimeout(300);
   broadcast("info", "  Tags set");
 
   await setDateTimeField(page, "bscd-start-date-time-input", session.dateOfAssessment, session.startTimeSlot);
