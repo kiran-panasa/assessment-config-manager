@@ -524,7 +524,11 @@ async function runInvite(apiEndpoint, apiToken, date) {
     if (s.sessionKey && s.topinAssessmentId) sessionMap.set(s.sessionKey, s.topinAssessmentId);
   });
 
-  const toInvite = bookings.filter(b => b.inviteStatus !== "sent" && b.sessionKey && sessionMap.has(b.sessionKey));
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const invalidUid = bookings.filter(b => b.inviteStatus !== "sent" && b.studentUid && !UUID_RE.test(b.studentUid));
+  if (invalidUid.length) broadcast("warn", `${invalidUid.length} student(s) skipped — studentUid is not a valid UUID (e.g. "${invalidUid[0].studentUid}")`);
+
+  const toInvite = bookings.filter(b => b.inviteStatus !== "sent" && b.sessionKey && sessionMap.has(b.sessionKey) && UUID_RE.test(b.studentUid || ""));
   const blocked  = bookings.filter(b => b.inviteStatus !== "sent" && b.sessionKey && !sessionMap.has(b.sessionKey));
   if (blocked.length) broadcast("warn", `${blocked.length} student(s) skipped — session not published`);
   if (toInvite.length === 0) {
