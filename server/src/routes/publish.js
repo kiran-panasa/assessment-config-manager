@@ -565,8 +565,8 @@ async function runInvite(apiEndpoint, apiToken, date) {
             }
           }
         } else {
-          const errorMsg = json.res_status || `HTTP ${status}`;
-          broadcast("error", `  Batch failed: ${errorMsg}`);
+          const errorMsg = json.res_status || json.message || json.error || JSON.stringify(json).slice(0, 200) || `HTTP ${status}`;
+          broadcast("error", `  Batch failed (${status}): ${errorMsg}`);
           for (const b of batch) { fbBatch.update(db.collection("bookingRows").doc(b.firestoreId), { inviteStatus: "failed", inviteError: errorMsg }); failed++; }
         }
         await fbBatch.commit();
