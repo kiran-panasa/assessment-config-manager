@@ -66,3 +66,51 @@ export async function checkHealth() {
   const res = await fetch(`${BASE}/api/health`);
   return res.ok;
 }
+
+// ── Local server helpers (for Playwright publish running on local machine) ────
+
+const LOCAL_SERVER_KEY = "localServerUrl";
+
+export function getLocalServerUrl() {
+  try { return localStorage.getItem(LOCAL_SERVER_KEY) || ""; } catch { return ""; }
+}
+
+export function setLocalServerUrl(url) {
+  try {
+    if (url) localStorage.setItem(LOCAL_SERVER_KEY, url.replace(/\/$/, ""));
+    else localStorage.removeItem(LOCAL_SERVER_KEY);
+  } catch {}
+}
+
+async function localRequest(method, path, body) {
+  const base = getLocalServerUrl();
+  if (!base) throw new Error("Local server URL not set — enter it in the Credentials tab.");
+  const token = await getToken();
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+export const localApi = {
+  get:    (path)       => localRequest("GET",    path),
+  post:   (path, body) => localRequest("POST",   path, body),
+};
+
+export function localProgressStream() {
+  const base = getLocalServerUrl();
+  if (!base) throw new Error("Local server URL not set.");
+  return new EventSource(`${base}/api/publish/progress`);
+}
+
+export async function checkLocalHealth() {
+  const base = getLocalServerUrl();
+  if (!base) return false;
+  try { const res = await fetch(`${base}/api/health`); return res.ok; } catch { return false; }
+}

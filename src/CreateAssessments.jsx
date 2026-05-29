@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-import { api, checkHealth, progressStream } from "./api/client";
+import {
+  api, checkHealth, progressStream,
+  localApi, checkLocalHealth, localProgressStream,
+  getLocalServerUrl, setLocalServerUrl,
+} from "./api/client";
 
 
 const LOG_COLOR = {
@@ -24,6 +28,7 @@ export default function CreateAssessments({ S, showToast }) {
   });
   const [credsSaved, setCredsSaved] = useState(false);
   const [credsLoaded, setCredsLoaded] = useState(false);
+  const [localUrl, setLocalUrl] = useState(() => getLocalServerUrl());
 
   const [examSessions, setExamSessions] = useState([]);
   const [bookingRows, setBookingRows] = useState([]);
@@ -62,7 +67,7 @@ export default function CreateAssessments({ S, showToast }) {
     if (esRef.current) esRef.current.close();
     const start = Date.now();
     setRunStartTs(start);
-    const es = progressStream();
+    const es = localProgressStream();
     esRef.current = es;
     es.onmessage = (e) => {
       const data = JSON.parse(e.data);
@@ -87,11 +92,11 @@ export default function CreateAssessments({ S, showToast }) {
     if (!credsLoaded) return;
     setServerOnline(null);
 
-    const check = () => checkHealth()
+    const check = () => checkLocalHealth()
       .then(ok => setServerOnline(ok))
       .catch(() => setServerOnline(false));
 
-    const checkJobStatus = () => api.get("/api/publish/status")
+    const checkJobStatus = () => localApi.get("/api/publish/status")
       .then(data => {
         if (data.jobRunning && !esRef.current) {
           setRunning("publish");
@@ -142,13 +147,14 @@ export default function CreateAssessments({ S, showToast }) {
     setLogs(prev => [...prev, { type, message, ts, id: ts + Math.random() }]);
 
   const handlePublish = async () => {
-    if (!serverOnline) { showToast("Server offline.", "error"); return; }
+    if (!getLocalServerUrl()) { showToast("Set Local Server URL in Credentials tab first.", "error"); return; }
+    if (!serverOnline) { showToast("Local server offline. Run: node src/index.js", "error"); return; }
     if (!creds.mobile || !creds.otp) { showToast("Enter Topin mobile and OTP in Credentials tab first.", "error"); return; }
     setLogs([]);
     setRunning("publish");
     startSSE();
     try {
-      await api.post("/api/publish/run", {
+      await localApi.post("/api/publish/run", {
         mobile: creds.mobile, otp: creds.otp,
         date: selDate || null,
         topinLoginUrl: creds.topinLoginUrl || null,
@@ -161,7 +167,6 @@ export default function CreateAssessments({ S, showToast }) {
   };
 
   const handleInvite = async () => {
-    if (!serverOnline) { showToast("Server offline.", "error"); return; }
     if (!creds.apiEndpoint || !creds.apiToken) { showToast("Enter Invite API credentials first.", "error"); return; }
     setLogs([]);
     setRunning("invite");
@@ -179,7 +184,7 @@ export default function CreateAssessments({ S, showToast }) {
   };
 
   const cancelJob = async () => {
-    try { await api.post("/api/publish/cancel"); } catch { /* best-effort */ }
+    try { await localApi.post("/api/publish/cancel"); } catch { /* best-effort */ }
     setRunning(null);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
   };
@@ -208,10 +213,16 @@ export default function CreateAssessments({ S, showToast }) {
       <div style={S.body}>
 
         {/* ── Offline warning ── */}
-        {serverOnline === false && (
+        {!getLocalServerUrl() && (
+          <div style={{ marginBottom: 24, padding: "16px 20px", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 8, fontSize: 12, color: "#92400e", lineHeight: 1.9 }}>
+            <strong>Local Server URL not set.</strong>{" "}
+            Go to <strong>Credentials</strong> tab and enter <code style={{ background: "#1e293b", padding: "2px 6px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>http://localhost:3001</code>, then run <code style={{ background: "#1e293b", padding: "2px 6px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>node src/index.js</code> locally to publish.
+          </div>
+        )}
+        {getLocalServerUrl() && serverOnline === false && (
           <div style={{ marginBottom: 24, padding: "16px 20px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 12, color: "#dc2626", lineHeight: 1.9 }}>
-            <strong style={{ color: "#dc2626" }}>Server is not reachable.</strong>{" "}
-            Check that the backend is deployed and the <code style={{ background: "#1e293b", padding: "2px 8px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>VITE_API_URL</code> environment variable is set correctly.
+            <strong>Local server offline.</strong>{" "}
+            Run <code style={{ background: "#1e293b", padding: "2px 6px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>node src/index.js</code> in the server directory, then refresh.
           </div>
         )}
 
@@ -220,6 +231,27 @@ export default function CreateAssessments({ S, showToast }) {
           <div style={{ animation: "fadeIn 0.2s ease" }}>
             <div style={S.sectionTitle}>Credentials</div>
             <div style={S.sectionSub}>All values are saved to Firestore and auto-loaded on every device.</div>
+
+            {/* Local Server URL */}
+            <div style={S.card}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#7c3aed", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>Local Publish Server</div>
+              <div>
+                <label style={S.label}>Local Server URL</label>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <input style={{ ...S.input, flex: 1 }} type="url"
+                    placeholder="http://localhost:3001"
+                    value={localUrl}
+                    onChange={e => setLocalUrl(e.target.value)} />
+                  <button style={{ ...S.btn("primary"), whiteSpace: "nowrap", background: "#7c3aed" }}
+                    onClick={() => { setLocalServerUrl(localUrl); showToast(localUrl ? "Local server URL saved." : "Local server URL cleared."); }}>
+                    Save
+                  </button>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
+                  Run <code style={{ background: "#1e293b", padding: "1px 5px", borderRadius: 3, fontFamily: "'DM Mono', monospace", color: "#e2e8f0", fontSize: 10 }}>node src/index.js</code> locally, then paste the URL here. Saved in browser only (not Firestore).
+                </div>
+              </div>
+            </div>
 
             {/* Topin login */}
             <div style={S.card}>
