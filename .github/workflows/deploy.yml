@@ -24,6 +24,8 @@ jobs:
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
 
+      - run: cp dist/index.html dist/404.html
+
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
