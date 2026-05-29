@@ -510,7 +510,12 @@ async function runPublish(mobile, otp, date) {
 
   // ── Playwright fallback (OTP login + browser automation) ─────────────────
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-  const browser = await chromium.launch({ headless: true, args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--single-process","--disable-accelerated-2d-canvas","--no-zygote"] });
+  const isLinux   = process.platform === "linux";
+  const isHeadless = process.env.HEADLESS !== "false";
+  const browserArgs = isLinux
+    ? ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--single-process","--disable-accelerated-2d-canvas","--no-zygote"]
+    : [];
+  const browser = await chromium.launch({ headless: isHeadless, slowMo: isHeadless ? 0 : 50, args: browserArgs });
 
   let sessionRestored = false;
   if (existsSync(COOKIES_FILE)) {
@@ -712,3 +717,4 @@ router.post("/cancel", requireAuth, requireAdmin, (_req, res) => {
 });
 
 export default router;
+export { runPublish, runInvite };
