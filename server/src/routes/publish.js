@@ -399,22 +399,6 @@ async function fetchPublishData(date) {
   return { assessments, sessions };
 }
 
-async function fetchInviteData(date) {
-  let bookingsRef = db.collection("bookingRows");
-  if (date) bookingsRef = bookingsRef.where("contestDate", "==", date);
-  const [bookingsSnap, sessionsSnap] = await Promise.all([
-    bookingsRef.get(),
-    db.collection("examSessions").where("publishStatus", "==", "published").get(),
-  ]);
-  const bookings = bookingsSnap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
-  const sessionMap = new Map();
-  sessionsSnap.docs.forEach(d => {
-    const s = d.data();
-    if (s.sessionKey && s.topinAssessmentId) sessionMap.set(s.sessionKey, s.topinAssessmentId);
-  });
-  return { bookings, sessionMap };
-}
-
 async function logJob(type, startMs, stats) {
   const durationMinutes = parseFloat(((Date.now() - startMs) / 60000).toFixed(2));
   await db.collection("jobLogs").add({
@@ -572,98 +556,6 @@ async function runPublish(mobile, otp, date) {
   broadcast("done", `Publish complete — ${passed} published, ${failed} failed`, { passed, failed });
 }
 
-// ── Main invite loop ──────────────────────────────────────────────────────────
-
-const INVITE_BATCH_SIZE = 20;
-
-async function callInviteAPIBatch(endpoint, apiKey, studentUids, assessmentId) {
-  const payload = { candidate_user_ids: studentUids, assessment_id: assessmentId };
-  let lastErr;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const text = await res.text().catch(() => "");
-      let json = {};
-      try { json = JSON.parse(text); } catch { /* non-JSON */ }
-      if (res.ok || res.status < 500) return { ok: res.ok, status: res.status, json };
-      lastErr = new Error(`HTTP ${res.status}`);
-    } catch (err) { lastErr = err; }
-    if (attempt < 3) await new Promise(r => setTimeout(r, 500 * 2 ** (attempt - 1)));
-  }
-  throw lastErr;
-}
-
-async function runInvite(apiEndpoint, apiToken, date) {
-  const startMs = Date.now();
-  cancelRequested = false;
-  broadcast("info", "Fetching bookings from Firestore…");
-  const { bookings, sessionMap } = await fetchInviteData(date);
-
-  const toInvite = bookings.filter(b => b.inviteStatus !== "sent" && b.sessionKey && sessionMap.has(b.sessionKey));
-  const blocked  = bookings.filter(b => b.inviteStatus !== "sent" && b.sessionKey && !sessionMap.has(b.sessionKey));
-  if (blocked.length) broadcast("warn", `${blocked.length} student(s) skipped — session not published`);
-  if (toInvite.length === 0) {
-    broadcast("success", "All eligible students already invited.");
-    broadcast("done", "Invite complete — 0 invites", { sent: 0, failed: 0 });
-    return;
-  }
-
-  const groups = new Map();
-  for (const b of toInvite) {
-    const aid = sessionMap.get(b.sessionKey);
-    if (!groups.has(aid)) groups.set(aid, []);
-    groups.get(aid).push(b);
-  }
-  broadcast("info", `Sending ${toInvite.length} invite(s) across ${groups.size} assessment(s)…`);
-
-  let sent = 0, failed = 0;
-  for (const [assessmentId, students] of groups) {
-    const totalBatches = Math.ceil(students.length / INVITE_BATCH_SIZE);
-    for (let i = 0; i < students.length; i += INVITE_BATCH_SIZE) {
-      if (cancelRequested) { broadcast("warn", "Cancelled."); break; }
-      const batch = students.slice(i, i + INVITE_BATCH_SIZE);
-      broadcast("info", `Batch ${Math.floor(i/INVITE_BATCH_SIZE)+1}/${totalBatches} — ${batch.length} students`);
-      try {
-        const { ok, status, json } = await callInviteAPIBatch(apiEndpoint, apiToken, batch.map(b => b.studentUid), assessmentId);
-        if (ok) {
-          const failedUids = new Set((json.failed_users_details || []).map(f => String(f.user_id || "").trim()));
-          const now = new Date().toISOString();
-          const fbBatch = db.batch();
-          for (const b of batch) {
-            if (failedUids.has(b.studentUid)) {
-              const reason = (json.failed_users_details || []).find(f => String(f.user_id) === b.studentUid)?.reason || "Failed";
-              fbBatch.update(db.collection("bookingRows").doc(b.firestoreId), { inviteStatus: "failed", inviteError: reason });
-              failed++;
-            } else {
-              fbBatch.update(db.collection("bookingRows").doc(b.firestoreId), { inviteStatus: "sent", invitedAt: now, inviteError: null });
-              sent++;
-            }
-          }
-          await fbBatch.commit();
-        } else {
-          const errorMsg = json.res_status || `HTTP ${status}`;
-          broadcast("error", `  Batch failed: ${errorMsg}`);
-          const fbBatch = db.batch();
-          for (const b of batch) { fbBatch.update(db.collection("bookingRows").doc(b.firestoreId), { inviteStatus: "failed", inviteError: errorMsg }); failed++; }
-          await fbBatch.commit().catch(() => {});
-        }
-      } catch (err) {
-        broadcast("error", `  Batch error: ${err.message}`);
-        const fbBatch = db.batch();
-        for (const b of batch) { fbBatch.update(db.collection("bookingRows").doc(b.firestoreId), { inviteStatus: "failed", inviteError: err.message }); failed++; }
-        await fbBatch.commit().catch(() => {});
-      }
-      await new Promise(r => setTimeout(r, 2000));
-    }
-  }
-  await logJob("invite", startMs, { sent, failed });
-  broadcast("done", `Invite complete — ${sent} sent, ${failed} failed`, { sent, failed });
-}
-
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 router.get("/health", (_req, res) => res.json({ status: "ok", jobRunning }));
@@ -699,22 +591,10 @@ router.post("/run", requireAuth, requireAdmin, async (req, res) => {
     .finally(() => { jobRunning = false; });
 });
 
-router.post("/invite", requireAuth, requireAdmin, async (req, res) => {
-  if (jobRunning) return res.status(409).json({ error: "A job is already running." });
-  const { apiEndpoint, apiToken, date } = req.body;
-  if (!apiEndpoint || !apiToken) return res.status(400).json({ error: "apiEndpoint and apiToken required" });
-  jobRunning = true;
-  res.json({ started: true });
-  await new Promise(r => setTimeout(r, 400));
-  runInvite(apiEndpoint, apiToken, date || null)
-    .catch(err => broadcast("error", `Fatal: ${err.message}`))
-    .finally(() => { jobRunning = false; });
-});
-
 router.post("/cancel", requireAuth, requireAdmin, (_req, res) => {
   if (jobRunning) { cancelRequested = true; broadcast("warn", "Cancel requested…"); }
   res.json({ ok: true });
 });
 
 export default router;
-export { runPublish, runInvite };
+export { runPublish };

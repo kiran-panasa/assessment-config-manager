@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-import { api, invalidateCache } from "./api/client";
+import { getAllUsers, updateUser, deleteUser, getAllRoles, createRole, updateRole, deleteRole } from "./api/firestore";
 
 const ALL_PAGES = [
   { key: "assessments",  label: "Assessment Configurations" },
@@ -56,12 +56,7 @@ export default function AdminPanel({ S, showToast }) {
 
   const loadData = useCallback(async () => {
     try {
-      const [usersRes, rolesRes] = await Promise.all([
-        api.get("/api/users"),
-        api.get("/api/roles"),
-      ]);
-      const usersData = usersRes.users || [];
-      const rolesData = rolesRes.roles || [];
+      const [usersData, rolesData] = await Promise.all([getAllUsers(), getAllRoles()]);
       const sortByDate = (a, b) => {
         const aMs = a.createdAt?._seconds ? a.createdAt._seconds * 1000 : new Date(a.createdAt || 0).getTime();
         const bMs = b.createdAt?._seconds ? b.createdAt._seconds * 1000 : new Date(b.createdAt || 0).getTime();
@@ -90,8 +85,11 @@ export default function AdminPanel({ S, showToast }) {
     if (!role) { showToast("Select a role first.", "error"); return; }
     setSavingKey(user.id, true);
     try {
-      await api.put(`/api/users/${user.id}`, { role, status: "active", approvedBy: currentUser.uid });
-      invalidateCache("/api/users");
+      await updateUser(user.id, {
+        role, status: "active",
+        approvedBy: currentUser?.email || currentUser?.uid || "",
+        approvedAt: new Date().toISOString(),
+      });
       showToast(`${user.email} approved.`);
       setPendingRoleMap(m => { const n = { ...m }; delete n[user.id]; return n; });
       loadData();
@@ -112,8 +110,7 @@ export default function AdminPanel({ S, showToast }) {
     if (!window.confirm(`Change role for ${user.email} to "${roleName}"?`)) return;
     setSavingKey(user.id, true);
     try {
-      await api.put(`/api/users/${user.id}`, { role: newRole });
-      invalidateCache("/api/users");
+      await updateUser(user.id, { role: newRole });
       showToast(`Role updated for ${user.email}.`);
       setUserRoleMap(m => { const n = { ...m }; delete n[user.id]; return n; });
       loadData();
@@ -128,8 +125,7 @@ export default function AdminPanel({ S, showToast }) {
     if (!window.confirm(`Revoke access for ${user.email}? They will be moved back to Pending.`)) return;
     setSavingKey(user.id + "_revoke", true);
     try {
-      await api.put(`/api/users/${user.id}`, { status: "pending", role: null });
-      invalidateCache("/api/users");
+      await updateUser(user.id, { status: "pending", role: null });
       showToast(`Access revoked for ${user.email}.`);
       loadData();
     } catch { showToast("Failed to revoke access.", "error"); }
@@ -140,8 +136,7 @@ export default function AdminPanel({ S, showToast }) {
     if (!window.confirm(`Permanently delete ${user.email}? Their app profile will be removed. This cannot be undone.`)) return;
     setSavingKey(user.id + "_delete", true);
     try {
-      await api.delete(`/api/users/${user.id}`);
-      invalidateCache("/api/users");
+      await deleteUser(user.id);
       showToast(`${user.email} deleted.`);
       loadData();
     } catch { showToast("Failed to delete user.", "error"); }
@@ -153,8 +148,7 @@ export default function AdminPanel({ S, showToast }) {
       ? currentPages.filter(p => p !== pageKey)
       : [...currentPages, pageKey];
     try {
-      await api.put(`/api/roles/${roleId}`, { pages: newPages });
-      invalidateCache("/api/roles");
+      await updateRole(roleId, { pages: newPages });
       loadData();
     } catch { showToast("Failed to update access.", "error"); }
   };
@@ -165,8 +159,7 @@ export default function AdminPanel({ S, showToast }) {
     const key = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
     if (roles.find(r => r.key === key)) { showToast("A role with this name already exists.", "error"); return; }
     try {
-      await api.post("/api/roles", { key, name, pages: newRolePages, isSystem: false });
-      invalidateCache("/api/roles");
+      await createRole(key, name, newRolePages);
       showToast(`Role "${name}" created.`);
       setNewRoleName(""); setNewRolePages([]);
       loadData();
@@ -177,11 +170,10 @@ export default function AdminPanel({ S, showToast }) {
     const inUse = [...activeUsers, ...pendingUsers].some(u => u.role === role.key);
     if (inUse) { showToast("Cannot delete — users are assigned to this role.", "error"); return; }
     try {
-      await api.delete(`/api/roles/${role.id}`);
-      invalidateCache("/api/roles");
+      await deleteRole(role.id);
       showToast(`Role "${role.name}" deleted.`);
       loadData();
-    } catch { showToast("Failed to delete role.", "error"); }
+    } catch (err) { showToast(err.message || "Failed to delete role.", "error"); }
   };
 
   return (

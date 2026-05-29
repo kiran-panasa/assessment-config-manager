@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-import { api, invalidateCache } from "./api/client";
+import { getInterviews, bulkCreateInterviews } from "./api/firestore";
 
 const PAGE_SIZE = 20;
 
@@ -103,15 +103,16 @@ export default function InterviewerView({ S, showToast }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get("/api/interviews");
-      const sorted = (data.interviews || []).sort((a, b) =>
+      const email = currentUser?.email || "";
+      const data = await getInterviews(email, isAdmin);
+      const sorted = data.sort((a, b) =>
         (a.interviewDate || "").localeCompare(b.interviewDate || "") ||
         (a.interviewTime || "").localeCompare(b.interviewTime || "")
       );
       setInterviews(sorted);
     } catch { /* silent */ }
     setLoading(false);
-  }, []);
+  }, [currentUser, isAdmin]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -146,8 +147,7 @@ export default function InterviewerView({ S, showToast }) {
     if (!csvData?.length) return;
     setUploading(true);
     try {
-      await api.post("/api/interviews/bulk", { rows: csvData });
-      invalidateCache("/api/interviews");
+      await bulkCreateInterviews(csvData);
       showToast(`${csvData.length} interview${csvData.length !== 1 ? "s" : ""} uploaded.`);
       setCsvData(null);
       load();

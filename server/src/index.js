@@ -2,16 +2,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 
-import assessmentsRouter from "./routes/assessments.js";
-import configRouter      from "./routes/config.js";
-import bookingsRouter    from "./routes/bookings.js";
-import sessionsRouter    from "./routes/sessions.js";
-import usersRouter       from "./routes/users.js";
-import rolesRouter       from "./routes/roles.js";
-import settingsRouter    from "./routes/settings.js";
-import interviewsRouter  from "./routes/interviews.js";
-import logsRouter        from "./routes/logs.js";
-import publishRouter     from "./routes/publish.js";
+import bookingsRouter from "./routes/bookings.js";
+import publishRouter  from "./routes/publish.js";
 
 const app = express();
 
@@ -29,16 +21,11 @@ app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", ts: Date.now() }));
 
-app.use("/api/assessments", assessmentsRouter);
-app.use("/api/config",      configRouter);
-app.use("/api/bookings",    bookingsRouter);
-app.use("/api/sessions",    sessionsRouter);
-app.use("/api/users",       usersRouter);
-app.use("/api/roles",       rolesRouter);
-app.use("/api/settings",    settingsRouter);
-app.use("/api/interviews",  interviewsRouter);
-app.use("/api/logs",        logsRouter);
-app.use("/api/publish",     publishRouter);
+// Northflank: only fetch-db remains server-side
+app.use("/api/bookings", bookingsRouter);
+
+// Local publish server: Playwright automation + SSE progress
+app.use("/api/publish",  publishRouter);
 
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 
@@ -46,5 +33,7 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`\nAssessment Config Manager API — port ${PORT}`);
   console.log(`  GET  /api/health`);
-  console.log(`  All data routes under /api/\n`);
+  console.log(`  GET  /api/bookings/fetch-db   (Replit DB proxy)`);
+  console.log(`  POST /api/publish/run         (local Playwright runner)`);
+  console.log(`  GET  /api/publish/progress    (SSE stream)\n`);
 });

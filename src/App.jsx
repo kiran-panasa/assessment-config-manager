@@ -3,7 +3,14 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import { signOut } from "firebase/auth";
 import { auth } from "./firebase";
 import { AuthProvider, useAuth } from "./AuthContext";
-import { api, invalidateCache } from "./api/client";
+import { api } from "./api/client";
+import {
+  getAssessments, createAssessment, updateAssessment, deleteAssessment,
+  getConfig, addSkill, removeSkill, addLevel, removeLevel,
+  getBookings, bulkSaveBookings, deleteBooking, bulkDeleteBookings,
+  getSessions, updateSession, deleteSession, bulkDeleteSessions,
+  createLog,
+} from "./api/firestore";
 
 import CreateAssessments from "./CreateAssessments";
 import InvitedStudents   from "./InvitedStudents";
@@ -195,14 +202,14 @@ function StudentBookings({ S, showToast }) {
 
   const loadData = useCallback(async () => {
     try {
-      const [aRes, bRes, sRes] = await Promise.all([
-        api.get("/api/assessments"),
-        api.get("/api/bookings"),
-        api.get("/api/sessions"),
+      const [assessmentsData, bookingsData, sessionsData] = await Promise.all([
+        getAssessments(),
+        getBookings(),
+        getSessions(),
       ]);
-      setAssessments(aRes.assessments || []);
-      setBookingRows(bRes.rows || []);
-      setExamSessions(sRes.sessions || []);
+      setAssessments(assessmentsData || []);
+      setBookingRows(bookingsData || []);
+      setExamSessions(sessionsData || []);
     } catch (err) { showToast(err.message, "error"); }
     setLoading(false);
   }, []);
@@ -270,11 +277,8 @@ function StudentBookings({ S, showToast }) {
         if (!existId) return { type:"set", data:row };
         return null;
       }).filter(Boolean);
-      await api.post("/api/bookings/bulk-save", {
-        bookingOps, newSessions: csvData.newSessions, batchId,
-      });
-      invalidateCache("/api/bookings"); invalidateCache("/api/sessions");
-      await api.post("/api/logs", { action:"csv_upload", batchId, bookings:rowsToSave.length, sessions:csvData.newSessions.length });
+      await bulkSaveBookings(bookingOps, csvData.newSessions, batchId);
+      await createLog({ action: "csv_upload", batchId, bookings: rowsToSave.length, sessions: csvData.newSessions.length });
       showToast(`Saved: ${rowsToSave.length} bookings, ${csvData.newSessions.length} new sessions.`);
       setCsvData(null); setDupChoice(null); if (fileRef.current) fileRef.current.value="";
       setBookTab("bookings");
@@ -284,32 +288,41 @@ function StudentBookings({ S, showToast }) {
   };
 
   const handleDeleteBooking = async (id) => {
-    try { await api.delete(`/api/bookings/${id}`); invalidateCache("/api/bookings"); await api.post("/api/logs",{action:"booking_deleted",id}); showToast("Booking deleted."); setBookingRows(r=>r.filter(x=>x.id!==id)); }
-    catch (err) { showToast(err.message, "error"); }
+    try {
+      await deleteBooking(id);
+      await createLog({ action: "booking_deleted", id });
+      showToast("Booking deleted.");
+      setBookingRows(r => r.filter(x => x.id !== id));
+    } catch (err) { showToast(err.message, "error"); }
   };
 
   const handleDeleteSession = async (id) => {
-    try { await api.delete(`/api/sessions/${id}`); invalidateCache("/api/sessions"); await api.post("/api/logs",{action:"session_deleted",id}); showToast("Session deleted."); setExamSessions(s=>s.filter(x=>x.id!==id)); }
-    catch (err) { showToast(err.message, "error"); }
+    try {
+      await deleteSession(id);
+      await createLog({ action: "session_deleted", id });
+      showToast("Session deleted.");
+      setExamSessions(s => s.filter(x => x.id !== id));
+    } catch (err) { showToast(err.message, "error"); }
   };
 
   const handleMarkPublished = async () => {
-    if (!markModal||!markModal.topinId.trim()) return;
+    if (!markModal || !markModal.topinId.trim()) return;
     try {
-      await api.put(`/api/sessions/${markModal.session.id}`, {
-        topinAssessmentId:markModal.topinId.trim(), assessmentLink:markModal.link.trim()||null,
-        publishStatus:"published", publishedAt:new Date().toISOString(), publishError:null,
+      await updateSession(markModal.session.id, {
+        topinAssessmentId: markModal.topinId.trim(), assessmentLink: markModal.link.trim() || null,
+        publishStatus: "published", publishedAt: new Date().toISOString(), publishError: null,
       });
-      invalidateCache("/api/sessions");
-      await api.post("/api/logs",{action:"manual_publish",sessionId:markModal.session.id});
+      await createLog({ action: "manual_publish", sessionId: markModal.session.id });
       showToast("Session marked as published."); setMarkModal(null); await loadData();
     } catch (err) { showToast(err.message, "error"); }
   };
 
   const handleResetSession = async (id) => {
     if (!window.confirm("Reset to Pending?")) return;
-    try { await api.put(`/api/sessions/${id}`,{publishStatus:"pending",topinAssessmentId:null,assessmentLink:null,publishError:null}); invalidateCache("/api/sessions"); showToast("Session reset."); await loadData(); }
-    catch (err) { showToast(err.message, "error"); }
+    try {
+      await updateSession(id, { publishStatus: "pending", topinAssessmentId: null, assessmentLink: null, publishError: null });
+      showToast("Session reset."); await loadData();
+    } catch (err) { showToast(err.message, "error"); }
   };
 
   const openDeleteModal = (table) => {
@@ -320,10 +333,10 @@ function StudentBookings({ S, showToast }) {
   const handleBulkDelete = async () => {
     if (!deleteModal||deleting) return; setDeleting(true);
     try {
-      const endpoint = deleteModal.table==="bookings" ? "/api/bookings/bulk-delete" : "/api/sessions/bulk-delete";
-      await api.post(endpoint, { ids: deleteModal.toDelete.map(r=>r.id) });
-      invalidateCache(deleteModal.table === "bookings" ? "/api/bookings" : "/api/sessions");
-      await api.post("/api/logs",{action:"bulk_delete",table:deleteModal.table,count:deleteModal.toDelete.length});
+      const ids = deleteModal.toDelete.map(r => r.id);
+      if (deleteModal.table === "bookings") await bulkDeleteBookings(ids);
+      else await bulkDeleteSessions(ids);
+      await createLog({ action: "bulk_delete", table: deleteModal.table, count: deleteModal.toDelete.length });
       showToast(`Deleted ${deleteModal.toDelete.length} records.`); setDeleteModal(null);
       if (deleteModal.table==="bookings") { setT1Filters(T1_FILTER_INIT); setT1Page(1); } else { setT2Filters(T2_FILTER_INIT); setT2Page(1); }
       await loadData();
@@ -610,10 +623,10 @@ function AssessmentsPage({ S, showToast }) {
 
   const loadData = useCallback(async () => {
     try {
-      const [aRes, cRes] = await Promise.all([api.get("/api/assessments"), api.get("/api/config")]);
-      setAssessments(aRes.assessments || []);
-      if (cRes.skills?.length) setSkills(cRes.skills);
-      if (cRes.levels?.length) setLevels(cRes.levels);
+      const [assessmentsData, configData] = await Promise.all([getAssessments(), getConfig()]);
+      setAssessments(assessmentsData || []);
+      if (configData.skills?.length) setSkills(configData.skills);
+      if (configData.levels?.length) setLevels(configData.levels);
     } catch (err) { showToast(err.message, "error"); }
     setLoading(false);
   }, []);
@@ -629,14 +642,12 @@ function AssessmentsPage({ S, showToast }) {
     if (duplicate) { showToast(`${selSkill} - ${selLevel} already exists.`, "error"); return; }
     try {
       if (editId) {
-        await api.put(`/api/assessments/${editId}`, { skill:selSkill, level:selLevel, url:configUrl.trim(), duration:selDuration });
-        invalidateCache("/api/assessments");
-        await api.post("/api/logs", { action:"updated", assessmentId:editId, skill:selSkill, level:selLevel });
+        await updateAssessment(editId, { skill: selSkill, level: selLevel, url: configUrl.trim(), duration: selDuration });
+        await createLog({ action: "updated", assessmentId: editId, skill: selSkill, level: selLevel });
         showToast("Assessment updated.");
       } else {
-        const { id } = await api.post("/api/assessments", { skill:selSkill, level:selLevel, url:configUrl.trim(), duration:selDuration });
-        invalidateCache("/api/assessments");
-        await api.post("/api/logs", { action:"created", assessmentId:id, skill:selSkill, level:selLevel });
+        const id = await createAssessment({ skill: selSkill, level: selLevel, url: configUrl.trim(), duration: selDuration });
+        await createLog({ action: "created", assessmentId: id, skill: selSkill, level: selLevel });
         showToast("Assessment saved.");
       }
       setSelSkill(""); setSelLevel(""); setConfigUrl(""); setSelDuration(""); setEditId(null);
@@ -646,30 +657,45 @@ function AssessmentsPage({ S, showToast }) {
 
   const handleEdit   = (a) => { setSelSkill(a.skill); setSelLevel(a.level); setConfigUrl(a.url); setSelDuration(a.duration?String(a.duration):""); setEditId(a.id); setTab("entry"); };
   const handleDelete = async (id) => {
-    const a = assessments.find(x=>x.id===id);
-    try { await api.delete(`/api/assessments/${id}`); invalidateCache("/api/assessments"); await api.post("/api/logs",{action:"deleted",assessmentId:id,skill:a?.skill}); showToast("Deleted."); await loadData(); }
-    catch (err) { showToast(err.message, "error"); }
+    const a = assessments.find(x => x.id === id);
+    try {
+      await deleteAssessment(id);
+      await createLog({ action: "deleted", assessmentId: id, skill: a?.skill });
+      showToast("Deleted."); await loadData();
+    } catch (err) { showToast(err.message, "error"); }
   };
 
   const handleAddSkill = async () => {
     const s = newSkill.trim();
-    if (!s||skills.includes(s)) { showToast("Skill already exists or empty.", "error"); return; }
-    try { await api.post("/api/config/skills", { skill:s }); invalidateCache("/api/config"); await api.post("/api/logs",{action:"skill_added",skill:s}); setNewSkill(""); showToast("Skill added."); await loadData(); }
-    catch (err) { showToast(err.message, "error"); }
+    if (!s || skills.includes(s)) { showToast("Skill already exists or empty.", "error"); return; }
+    try {
+      await addSkill(s);
+      await createLog({ action: "skill_added", skill: s });
+      setNewSkill(""); showToast("Skill added."); await loadData();
+    } catch (err) { showToast(err.message, "error"); }
   };
   const handleRemoveSkill = async (s) => {
-    try { await api.delete(`/api/config/skills/${encodeURIComponent(s)}`); invalidateCache("/api/config"); await api.post("/api/logs",{action:"skill_removed",skill:s}); showToast("Skill removed."); await loadData(); }
-    catch (err) { showToast(err.message, "error"); }
+    try {
+      await removeSkill(s);
+      await createLog({ action: "skill_removed", skill: s });
+      showToast("Skill removed."); await loadData();
+    } catch (err) { showToast(err.message, "error"); }
   };
   const handleAddLevel = async () => {
     const l = newLevel.trim().toUpperCase();
-    if (!l||levels.includes(l)) { showToast("Level exists or empty.", "error"); return; }
-    try { await api.post("/api/config/levels", { level:l }); invalidateCache("/api/config"); await api.post("/api/logs",{action:"level_added",level:l}); setNewLevel(""); showToast("Level added."); await loadData(); }
-    catch (err) { showToast(err.message, "error"); }
+    if (!l || levels.includes(l)) { showToast("Level exists or empty.", "error"); return; }
+    try {
+      await addLevel(l);
+      await createLog({ action: "level_added", level: l });
+      setNewLevel(""); showToast("Level added."); await loadData();
+    } catch (err) { showToast(err.message, "error"); }
   };
   const handleRemoveLevel = async (l) => {
-    try { await api.delete(`/api/config/levels/${encodeURIComponent(l)}`); invalidateCache("/api/config"); await api.post("/api/logs",{action:"level_removed",level:l}); showToast("Level removed."); await loadData(); }
-    catch (err) { showToast(err.message, "error"); }
+    try {
+      await removeLevel(l);
+      await createLog({ action: "level_removed", level: l });
+      showToast("Level removed."); await loadData();
+    } catch (err) { showToast(err.message, "error"); }
   };
 
   const filtered = assessments.filter(a=>(filterSkill==="All"||a.skill===filterSkill)&&(filterLevel==="All"||a.level===filterLevel));
@@ -850,18 +876,11 @@ function AppShell() {
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 function AppContent() {
-  const { authLoading, serverWaking, currentUser, userProfile } = useAuth();
+  const { authLoading, currentUser, userProfile } = useAuth();
   if (authLoading) return (
     <div style={{ minHeight:"100vh",background:"#f0f4f8",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12 }}>
       <style>{css}</style>
-      <span style={{ color:"#94a3b8",fontFamily:"'Inter',sans-serif",fontSize:14 }}>
-        {serverWaking ? "Server is starting up…" : "Loading…"}
-      </span>
-      {serverWaking && (
-        <span style={{ color:"#cbd5e1",fontFamily:"'Inter',sans-serif",fontSize:12 }}>
-          This takes up to 20 seconds on first load
-        </span>
-      )}
+      <span style={{ color:"#94a3b8",fontFamily:"'Inter',sans-serif",fontSize:14 }}>Loading…</span>
     </div>
   );
   return (

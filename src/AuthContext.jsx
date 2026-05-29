@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { auth } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { api, invalidateCache } from "./api/client";
+import { getMyProfile } from "./api/firestore";
 
 const AuthContext = createContext(null);
 
@@ -9,37 +9,22 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-const RETRY_DELAYS = [2000, 4000, 6000, 8000]; // 4 retries, ~20s total max
-
-async function fetchProfileWithRetry() {
-  let lastErr;
-  for (let i = 0; i <= RETRY_DELAYS.length; i++) {
-    try {
-      invalidateCache("/api/users/me");
-      return await api.get("/api/users/me");
-    } catch (err) {
-      lastErr = err;
-      if (i < RETRY_DELAYS.length) {
-        await new Promise(r => setTimeout(r, RETRY_DELAYS[i]));
-      }
-    }
-  }
-  throw lastErr;
-}
-
 export function AuthProvider({ children }) {
   const [currentUser,  setCurrentUser]  = useState(null);
   const [userProfile,  setUserProfile]  = useState(null);
   const [allowedPages, setAllowedPages] = useState([]);
   const [authLoading,  setAuthLoading]  = useState(true);
-  const [serverWaking, setServerWaking] = useState(false);
 
-  const loadProfile = useCallback(async () => {
+  const loadProfile = useCallback(async (uid) => {
     try {
-      const data = await api.get("/api/users/me");
-      setUserProfile(data.profile);
-      setAllowedPages(data.pages || []);
-      setServerWaking(false);
+      const data = await getMyProfile(uid);
+      if (data) {
+        setUserProfile(data.profile);
+        setAllowedPages(data.pages || []);
+      } else {
+        setUserProfile(null);
+        setAllowedPages([]);
+      }
     } catch {
       setUserProfile(null);
       setAllowedPages([]);
@@ -53,38 +38,20 @@ export function AuthProvider({ children }) {
         setUserProfile(null);
         setAllowedPages([]);
         setAuthLoading(false);
-        setServerWaking(false);
         return;
       }
-
-      // First attempt — fast path (server already warm)
-      try {
-        invalidateCache("/api/users/me");
-        const data = await api.get("/api/users/me");
-        setUserProfile(data.profile);
-        setAllowedPages(data.pages || []);
-        setServerWaking(false);
-      } catch {
-        // First attempt failed — server is likely cold-starting, retry with backoff
-        setServerWaking(true);
-        try {
-          const data = await fetchProfileWithRetry();
-          setUserProfile(data.profile);
-          setAllowedPages(data.pages || []);
-        } catch {
-          setUserProfile(null);
-          setAllowedPages([]);
-        }
-        setServerWaking(false);
-      }
-
+      await loadProfile(user.uid);
       setAuthLoading(false);
     });
     return unsub;
   }, [loadProfile]);
 
+  const refreshProfile = useCallback(() => {
+    if (auth.currentUser) loadProfile(auth.currentUser.uid);
+  }, [loadProfile]);
+
   return (
-    <AuthContext.Provider value={{ currentUser, userProfile, allowedPages, authLoading, serverWaking, refreshProfile: loadProfile }}>
+    <AuthContext.Provider value={{ currentUser, userProfile, allowedPages, authLoading, serverWaking: false, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

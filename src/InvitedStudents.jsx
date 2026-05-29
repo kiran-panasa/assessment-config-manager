@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { api, invalidateCache } from "./api/client";
+import { getBookings, getSessions, generateTinyUrls } from "./api/firestore";
 
 const PAGE_SIZE = 20;
 
@@ -34,12 +34,9 @@ export default function InvitedStudents({ S, showToast }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [bookings, sessions] = await Promise.all([
-        api.get("/api/bookings"),
-        api.get("/api/sessions"),
-      ]);
-      setBookingRows(bookings.rows || []);
-      setExamSessions(sessions.sessions || []);
+      const [bookingsData, sessionsData] = await Promise.all([getBookings(), getSessions()]);
+      setBookingRows(bookingsData || []);
+      setExamSessions(sessionsData || []);
     } catch { /* silent */ }
     setLoading(false);
   }, []);
@@ -103,8 +100,7 @@ export default function InvitedStudents({ S, showToast }) {
   const handleGenerateTinyUrls = useCallback(async () => {
     setGeneratingTiny(true);
     try {
-      const res = await api.post("/api/sessions/tiny-urls", {});
-      invalidateCache("/api/sessions");
+      const res = await generateTinyUrls();
       showToast(`TinyURLs: ${res.updated} generated, ${res.skipped} already done, ${res.failed} failed.`);
       await load();
     } catch (err) {

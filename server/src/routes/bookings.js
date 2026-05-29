@@ -1,85 +1,12 @@
 import { Router } from "express";
 import pg from "pg";
-import { db } from "../firebase.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const { Client } = pg;
 const router = Router();
 router.use(requireAuth);
 
-const CUTOFF_DAYS = 90;
-function cutoffDate() {
-  return new Date(Date.now() - CUTOFF_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
-router.get("/", async (req, res) => {
-  try {
-    const snap = await db.collection("bookingRows")
-      .where("contestDate", ">=", cutoffDate())
-      .orderBy("contestDate", "asc")
-      .get();
-    res.json({ rows: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Bulk save bookings + new sessions in one request (keeps them atomic-ish)
-router.post("/bulk-save", async (req, res) => {
-  try {
-    const { bookingOps, newSessions, batchId } = req.body;
-    const now = new Date().toISOString();
-    const CHUNK = 499;
-
-    // Write bookings
-    for (let i = 0; i < bookingOps.length; i += CHUNK) {
-      const batch = db.batch();
-      for (const op of bookingOps.slice(i, i + CHUNK)) {
-        const ref = op.id
-          ? db.collection("bookingRows").doc(op.id)
-          : db.collection("bookingRows").doc();
-        const data = { ...op.data, uploadBatchId: batchId, uploadedAt: now };
-        op.type === "update" ? batch.update(ref, data) : batch.set(ref, data);
-      }
-      await batch.commit();
-    }
-
-    // Write new sessions
-    for (let i = 0; i < newSessions.length; i += CHUNK) {
-      const batch = db.batch();
-      for (const s of newSessions.slice(i, i + CHUNK)) {
-        batch.set(db.collection("examSessions").doc(), {
-          ...s, publishStatus: "pending", uploadBatchId: batchId, uploadedAt: now,
-        });
-      }
-      await batch.commit();
-    }
-
-    res.json({ ok: true, bookings: bookingOps.length, sessions: newSessions.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.delete("/:id", async (req, res) => {
-  try {
-    await db.collection("bookingRows").doc(req.params.id).delete();
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Bulk delete filtered bookings
-router.post("/bulk-delete", async (req, res) => {
-  try {
-    const { ids } = req.body;
-    for (let i = 0; i < ids.length; i += 499) {
-      const batch = db.batch();
-      for (const id of ids.slice(i, i + 499)) {
-        batch.delete(db.collection("bookingRows").doc(id));
-      }
-      await batch.commit();
-    }
-    res.json({ ok: true, count: ids.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Fetch contest bookings from Replit/Neon Postgres
+// Fetch contest bookings from Replit/Neon Postgres — the only endpoint kept server-side
 router.get("/fetch-db", async (req, res) => {
   const { date } = req.query;
   if (!date) return res.status(400).json({ error: "date query param required (YYYY-MM-DD)" });

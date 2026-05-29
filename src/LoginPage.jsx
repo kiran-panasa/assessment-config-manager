@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { auth } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
-import { api } from "./api/client";
+import { createUserProfile } from "./api/firestore";
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -53,10 +53,12 @@ export default function LoginPage() {
     try {
       if (mode === "signup") {
         const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        await api.post("/api/users", {
-          uid: user.uid,
-          email: user.email,
+        await createUserProfile(user.uid, {
+          email: user.email || email.trim(),
           displayName: name.trim() || email.split("@")[0],
+          role: null,
+          status: "pending",
+          createdAt: new Date().toISOString(),
         });
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);

@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import {
-  api, checkHealth, progressStream,
   localApi, checkLocalHealth, localProgressStream,
   getLocalServerUrl, setLocalServerUrl,
 } from "./api/client";
+import { getSettings, saveSettings, getSessions, getBookings, runInvite } from "./api/firestore";
 
 
 const LOG_COLOR = {
@@ -24,6 +24,7 @@ export default function CreateAssessments({ S, showToast }) {
   const [creds, setCreds] = useState({
     mobile: "", otp: "",
     apiEndpoint: "", apiToken: "",
+    tinyUrlToken: "",
     topinLoginUrl: "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp",
   });
   const [credsSaved, setCredsSaved] = useState(false);
@@ -39,10 +40,11 @@ export default function CreateAssessments({ S, showToast }) {
   const [runStartTs, setRunStartTs] = useState(null);
   const logsEndRef = useRef(null);
   const esRef = useRef(null);
+  const cancelRef = useRef(false);
 
-  // Load credentials and data from API
+  // Load credentials and data from Firestore
   useEffect(() => {
-    api.get("/api/settings")
+    getSettings()
       .then(data => {
         if (data) setCreds(prev => ({ ...prev, ...data }));
         setCredsLoaded(true);
@@ -50,11 +52,11 @@ export default function CreateAssessments({ S, showToast }) {
       .catch(() => setCredsLoaded(true));
 
     Promise.all([
-      api.get("/api/sessions").catch(() => ({})),
-      api.get("/api/bookings").catch(() => ({})),
-    ]).then(([sessions, bookings]) => {
-      setExamSessions(sessions.sessions || []);
-      setBookingRows(bookings.rows || []);
+      getSessions().catch(() => []),
+      getBookings().catch(() => []),
+    ]).then(([sessionsData, bookingsData]) => {
+      setExamSessions(sessionsData || []);
+      setBookingRows(bookingsData || []);
     });
   }, []);
 
@@ -87,7 +89,7 @@ export default function CreateAssessments({ S, showToast }) {
     };
   }, [showToast]);
 
-  // Server health check
+  // Server health check (for local publish server)
   useEffect(() => {
     if (!credsLoaded) return;
     setServerOnline(null);
@@ -119,7 +121,7 @@ export default function CreateAssessments({ S, showToast }) {
 
   const saveCreds = async () => {
     try {
-      await api.put("/api/settings", creds);
+      await saveSettings(creds);
       setCredsSaved(true);
       showToast("Credentials saved.");
       setTimeout(() => setCredsSaved(false), 2000);
@@ -169,21 +171,26 @@ export default function CreateAssessments({ S, showToast }) {
   const handleInvite = async () => {
     if (!creds.apiEndpoint || !creds.apiToken) { showToast("Enter Invite API credentials first.", "error"); return; }
     setLogs([]);
+    cancelRef.current = false;
     setRunning("invite");
-    startSSE();
+    setRunStartTs(Date.now());
     try {
-      await api.post("/api/publish/invite", {
-        apiEndpoint: creds.apiEndpoint, apiToken: creds.apiToken,
-        date: selDate || null,
-      });
+      await runInvite(
+        creds.apiEndpoint,
+        creds.apiToken,
+        selDate || null,
+        (type, message) => addLog(type, message),
+        cancelRef,
+      );
     } catch (err) {
-      addLog("error", err.message || "Server error");
+      addLog("error", err.message || "Invite failed");
+    } finally {
       setRunning(null);
-      if (esRef.current) { esRef.current.close(); esRef.current = null; }
     }
   };
 
   const cancelJob = async () => {
+    cancelRef.current = true;
     try { await localApi.post("/api/publish/cancel"); } catch { /* best-effort */ }
     setRunning(null);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
@@ -297,6 +304,19 @@ export default function CreateAssessments({ S, showToast }) {
               </div>
             </div>
 
+            {/* TinyURL */}
+            <div style={S.card}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>TinyURL</div>
+              <div>
+                <label style={S.label}>TinyURL API Token</label>
+                <input style={S.input} type="password" placeholder="TinyURL Bearer token…"
+                  value={creds.tinyUrlToken} onChange={e => setCreds(p => ({ ...p, tinyUrlToken: e.target.value }))} />
+                <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
+                  Used to auto-shorten assessment links. Get from tinyurl.com/app/settings/api.
+                </div>
+              </div>
+            </div>
+
             <button style={{ ...S.btn("primary"), minWidth: 180 }} onClick={saveCreds}>
               {credsSaved ? "✓ Saved" : "Save Credentials"}
             </button>
@@ -351,8 +371,8 @@ export default function CreateAssessments({ S, showToast }) {
               </div>
               <div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <button style={{ ...S.btn("secondary"), minWidth: 190, opacity: (running || !serverOnline) ? 0.45 : 1, border: "1px solid #e2e8f0" }}
-                    onClick={handleInvite} disabled={!!running || !serverOnline}>
+                  <button style={{ ...S.btn("secondary"), minWidth: 190, opacity: running ? 0.45 : 1, border: "1px solid #e2e8f0" }}
+                    onClick={handleInvite} disabled={!!running}>
                     {running === "invite" ? "Inviting…" : "Invite Students"}
                   </button>
                   {running === "invite" && (
