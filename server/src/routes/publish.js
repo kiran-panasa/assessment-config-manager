@@ -66,7 +66,9 @@ async function saveSession(context) {
 async function tryRestoreSession(context, page) {
   if (!existsSync(COOKIES_FILE)) return false;
   try {
-    await page.goto("https://config.topin.tech", { waitUntil: "domcontentloaded", timeout: 60000 });
+    // Navigate to a protected page (not just root) — root loads without full auth
+    await page.goto("https://config.topin.tech/home", { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForTimeout(2000); // allow client-side redirects to settle
     const valid = page.url().includes("config.topin.tech") && !page.url().includes("accounts.ccbp.in");
     if (valid) { broadcast("success", "[SESSION] Restored saved session."); return true; }
     broadcast("info", "[SESSION] Saved session expired — falling back to OTP login.");
@@ -232,6 +234,7 @@ async function publishOneSession(page, session, assessments) {
   const viewUrl = config.url.replace("/edit-assessment/", "/view-assessment/");
   broadcast("info", `  Opening: ${viewUrl.slice(0, 80)}`);
   await page.goto(viewUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(2000); // allow client-side redirects to settle
   if (page.url().includes("accounts.ccbp.in"))
     throw new Error("Session expired — re-run with a fresh OTP.");
 
