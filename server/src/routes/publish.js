@@ -273,7 +273,7 @@ async function publishOneSession(page, session, assessments) {
   }, session.uniqueExamId);
   if (!alreadyTagged) {
     const tagsInput = page.locator('[data-testid="bscd-assess-categories-input"] input').first();
-    await tagsInput.fill(session.uniqueExamId);
+    await tagsInput.fill(session.uniqueExamId.replace(/&/g, "AND"));
     await tagsInput.press("Enter");
     await page.waitForTimeout(300);
   }

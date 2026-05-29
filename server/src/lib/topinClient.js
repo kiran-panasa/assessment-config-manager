@@ -207,6 +207,13 @@ const INTEGRITY_CONFIG = {
   enable_periodic_pin_validation: true,
 };
 
+// Normalize a tag string for Topin: & → AND, trim whitespace.
+// Raw `&` gets HTML-encoded to `&amp;` by Topin's backend on storage,
+// causing GraphQL _ilike searches to miss the tag.
+function normalizeTag(tag) {
+  return tag.replace(/&/g, "AND").trim();
+}
+
 // ── Datetime formatting ────────────────────────────────────────────────────────
 
 function fmtDatetime(dateStr, timeStr) {
@@ -241,7 +248,7 @@ export async function publishSessionDirect(accessToken, session, configUrl) {
       end_datetime:        fmtDatetime(session.dateOfAssessment, session.endTimeSlot),
       selection_config:    { min_score_to_qualify: null, no_of_users_to_qualify: null },
       event_config:        EVENT_CONFIG,
-      content_tags:        [...STATIC_TAGS, session.uniqueExamId],
+      content_tags:        [...STATIC_TAGS, normalizeTag(session.uniqueExamId)],
       access_config:       { is_public: false, admin_review_access_type: "PRIVATE" },
       custom_data_form_link: null,
       assessment_mode:     "SEB_BROWSER",
@@ -319,7 +326,7 @@ export async function findAssessmentByTag(accessToken, userId, orgId, uniqueExam
       },
       body: JSON.stringify({
         query: FIND_ASSESSMENT_QUERY,
-        variables: { user_id: userId, org_id: orgId, tag: `%${uniqueExamId}%` },
+        variables: { user_id: userId, org_id: orgId, tag: `%${normalizeTag(uniqueExamId)}%` },
       }),
     });
 
