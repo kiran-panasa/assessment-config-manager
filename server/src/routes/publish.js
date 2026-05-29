@@ -184,6 +184,29 @@ async function setExitPin(page, exitPin) {
   await exitInput.fill(exitPin);
 }
 
+async function ensureRadioSelected(container, testId) {
+  const option = container.locator(`input[data-testid="${testId}"]`).first();
+  await option.waitFor({ state: "attached", timeout: 10000 });
+  if (await option.isChecked().catch(() => false)) return;
+  await container.locator("label", { hasText: testId }).first().click();
+}
+
+async function setQrBasedAttendanceMode(page) {
+  await ensureInternalAdminOpen(page);
+  const container = page.locator('[data-testid="ao-qr-code-option"]');
+  if (!(await container.locator("label", { hasText: "During Exam" }).first().isVisible().catch(() => false)))
+    await container.getByRole("button", { name: "QR based Attendance Mode" }).click();
+  await ensureRadioSelected(container, "During Exam");
+}
+
+async function setExamPinMode(page) {
+  await ensureInternalAdminOpen(page);
+  const container = page.locator('[data-testid="ao-pin-to-start-enable-option"]');
+  if (!(await container.locator("label", { hasText: "Common Start PIN" }).first().isVisible().catch(() => false)))
+    await container.getByRole("button", { name: "Enable Exam PIN" }).click();
+  await ensureRadioSelected(container, "Common Start PIN");
+}
+
 // ── TinyURL helper ────────────────────────────────────────────────────────────
 
 async function createTinyUrl(longUrl) {
@@ -243,6 +266,20 @@ async function publishOneSession(page, session, assessments) {
 
   await page.locator('input[placeholder="Enter Assessment Name"]').fill(session.assessmentTitle);
 
+  // Fix 4: replace existing tag rather than blindly appending
+  const existingTag = await page.evaluate(() => {
+    const chip = document.querySelector('[data-testid="bscd-assess-categories-input"] .Select__multi-value');
+    return chip ? (chip.textContent || "").trim() : null;
+  });
+  if (existingTag && existingTag !== session.uniqueExamId) {
+    await page.evaluate((tag) => {
+      const chips = Array.from(document.querySelectorAll('[data-testid="bscd-assess-categories-input"] .Select__multi-value'));
+      const chip = chips.find(n => (n.textContent || "").includes(tag));
+      const btn = chip?.querySelector(".Select__multi-value__remove");
+      if (btn) { btn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); btn.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
+    }, existingTag);
+    await page.waitForTimeout(200);
+  }
   const tagsInput = page.locator('[data-testid="bscd-assess-categories-input"] input').first();
   await tagsInput.fill(session.uniqueExamId);
   await tagsInput.press("Enter");
@@ -252,12 +289,25 @@ async function publishOneSession(page, session, assessments) {
   await setDateTimeField(page, "bscd-start-date-time-input", session.dateOfAssessment, session.startTimeSlot);
   await setDateTimeField(page, "bscd-end-date-time-input",   session.dateOfAssessment, session.endTimeSlot);
   await setExitPin(page, session.exitPin);
+  // Fix 2: set QR attendance + exam PIN mode (were missing entirely)
+  await setQrBasedAttendanceMode(page);
+  await setExamPinMode(page);
 
   await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click({ timeout: 30000 });
 
   const publishLocator = page.locator('button, a, [role="button"]').filter({ hasText: /^publish assessment$/i }).first();
   await publishLocator.waitFor({ timeout: 30000 });
   await publishLocator.click();
+
+  // Fix 3: handle access type selection dialog before "Yes, I agree"
+  const accessType = await page.evaluate(() => {
+    const body = document.body.textContent || "";
+    if (body.includes("Anyone can access and write the assessment")) return "Public";
+    return "Private";
+  }).catch(() => "Private");
+  try {
+    await page.locator("div").filter({ hasText: new RegExp(`^${accessType}`) }).first().click({ timeout: 5000 });
+  } catch { /* dialog may not show or already selected */ }
   await page.getByRole("button", { name: "Yes, I agree" }).click();
 
   const copyLinkButton = page.getByRole("button", { name: "Copy Link" });
@@ -460,7 +510,7 @@ async function runPublish(mobile, otp, date) {
 
   // ── Playwright fallback (OTP login + browser automation) ─────────────────
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-  const browser = await chromium.launch({ headless: true, args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu"] });
+  const browser = await chromium.launch({ headless: true, args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--single-process","--disable-accelerated-2d-canvas","--no-zygote"] });
 
   let sessionRestored = false;
   if (existsSync(COOKIES_FILE)) {
