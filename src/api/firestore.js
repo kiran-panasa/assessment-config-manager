@@ -1,7 +1,7 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, writeBatch, arrayUnion, arrayRemove,
+  query, where, orderBy, writeBatch, arrayUnion, arrayRemove, onSnapshot,
 } from "firebase/firestore";
 
 function cutoffDate() {
@@ -277,6 +277,26 @@ export async function createLog(data) {
     ...data,
     createdAt: new Date().toISOString(),
   });
+}
+
+// ── Real-time listeners ───────────────────────────────────────────────────────
+
+export function subscribeToSessions(callback) {
+  const q = query(
+    collection(db, "examSessions"),
+    where("dateOfAssessment", ">=", cutoffDate()),
+    orderBy("dateOfAssessment", "asc"),
+  );
+  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+}
+
+export function subscribeToBookings(callback) {
+  const q = query(
+    collection(db, "bookingRows"),
+    where("contestDate", ">=", cutoffDate()),
+    orderBy("contestDate", "asc"),
+  );
+  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 }
 
 // ── Invite (client-side) ──────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import {
   localApi, checkLocalHealth, localProgressStream,
   getLocalServerUrl, setLocalServerUrl,
 } from "./api/client";
-import { getSettings, saveSettings, getSessions, getBookings, runInvite } from "./api/firestore";
+import { getSettings, saveSettings, subscribeToSessions, subscribeToBookings, runInvite } from "./api/firestore";
 
 
 const LOG_COLOR = {
@@ -51,13 +51,9 @@ export default function CreateAssessments({ S, showToast }) {
       })
       .catch(() => setCredsLoaded(true));
 
-    Promise.all([
-      getSessions().catch(() => []),
-      getBookings().catch(() => []),
-    ]).then(([sessionsData, bookingsData]) => {
-      setExamSessions(sessionsData || []);
-      setBookingRows(bookingsData || []);
-    });
+    const unsubSessions = subscribeToSessions(data => setExamSessions(data));
+    const unsubBookings = subscribeToBookings(data => setBookingRows(data));
+    return () => { unsubSessions(); unsubBookings(); };
   }, []);
 
   // Redirect away from credentials tab if permission is revoked mid-session
