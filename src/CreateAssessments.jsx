@@ -4,7 +4,7 @@ import {
   localApi, checkLocalHealth, localProgressStream,
   getLocalServerUrl, setLocalServerUrl,
 } from "./api/client";
-import { getSettings, saveSettings, subscribeToSessions, subscribeToBookings, runInvite } from "./api/firestore";
+import { getSettings, saveSettings, subscribeToSessions, subscribeToBookings } from "./api/firestore";
 
 
 const LOG_COLOR = {
@@ -40,7 +40,6 @@ export default function CreateAssessments({ S, showToast }) {
   const [runStartTs, setRunStartTs] = useState(null);
   const logsEndRef = useRef(null);
   const esRef = useRef(null);
-  const cancelRef = useRef(false);
 
   // Load credentials and data from Firestore
   useEffect(() => {
@@ -165,23 +164,21 @@ export default function CreateAssessments({ S, showToast }) {
   };
 
   const handleInvite = async () => {
+    if (!getLocalServerUrl()) { showToast("Set Local Server URL in Credentials tab first.", "error"); return; }
+    if (!serverOnline) { showToast("Local server offline. Run: node src/index.js", "error"); return; }
     if (!creds.apiEndpoint || !creds.apiToken) { showToast("Enter Invite API credentials first.", "error"); return; }
     setLogs([]);
-    cancelRef.current = false;
     setRunning("invite");
-    setRunStartTs(Date.now());
+    startSSE();
     try {
-      await runInvite(
-        creds.apiEndpoint,
-        creds.apiToken,
-        selDate || null,
-        (type, message) => addLog(type, message),
-        cancelRef,
-      );
+      await localApi.post("/api/publish/invite", {
+        apiEndpoint: creds.apiEndpoint, apiToken: creds.apiToken,
+        date: selDate || null,
+      });
     } catch (err) {
-      addLog("error", err.message || "Invite failed");
-    } finally {
+      addLog("error", err.message || "Server error");
       setRunning(null);
+      if (esRef.current) { esRef.current.close(); esRef.current = null; }
     }
   };
 
