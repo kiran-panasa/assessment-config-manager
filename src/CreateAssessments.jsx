@@ -183,7 +183,6 @@ export default function CreateAssessments({ S, showToast }) {
   };
 
   const cancelJob = async () => {
-    cancelRef.current = true;
     try { await localApi.post("/api/publish/cancel"); } catch { /* best-effort */ }
     setRunning(null);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
@@ -213,13 +212,7 @@ export default function CreateAssessments({ S, showToast }) {
       <div style={S.body}>
 
         {/* ── Offline warning ── */}
-        {!getLocalServerUrl() && (
-          <div style={{ marginBottom: 24, padding: "16px 20px", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 8, fontSize: 12, color: "#92400e", lineHeight: 1.9 }}>
-            <strong>Local Server URL not set.</strong>{" "}
-            Go to <strong>Credentials</strong> tab and enter <code style={{ background: "#1e293b", padding: "2px 6px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>http://localhost:3001</code>, then run <code style={{ background: "#1e293b", padding: "2px 6px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>node src/index.js</code> locally to publish.
-          </div>
-        )}
-        {getLocalServerUrl() && serverOnline === false && (
+        {serverOnline === false && (
           <div style={{ marginBottom: 24, padding: "16px 20px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 12, color: "#dc2626", lineHeight: 1.9 }}>
             <strong>Local server offline.</strong>{" "}
             Run <code style={{ background: "#1e293b", padding: "2px 6px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>node src/index.js</code> in the server directory, then refresh.
