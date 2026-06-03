@@ -2,6 +2,7 @@ import { useState } from "react";
 import { auth } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { createUserProfile, checkInvitedEmail, removeInvitedEmail } from "./api/firestore";
+import { useAuth } from "./AuthContext";
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -36,6 +37,7 @@ const EyeIcon = ({ open }) => open ? (
 );
 
 export default function LoginPage() {
+  const { refreshProfile } = useAuth();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -63,6 +65,7 @@ export default function LoginPage() {
           ...(invite && { approvedBy: invite.invitedBy, approvedAt: new Date().toISOString() }),
         });
         if (invite) await removeInvitedEmail(invite.id);
+        if (invite) await refreshProfile();
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
