@@ -279,9 +279,9 @@ export async function getInvitedEmails() {
 
 export async function addInvitedEmail(email, role, invitedBy) {
   const norm = email.toLowerCase().trim();
-  const existing = await getDocs(query(collection(db, "invitedEmails"), where("email", "==", norm)));
-  if (!existing.empty) throw new Error("This email is already in the invite list.");
-  await addDoc(collection(db, "invitedEmails"), {
+  const existing = await getDoc(doc(db, "invitedEmails", norm));
+  if (existing.exists()) throw new Error("This email is already in the invite list.");
+  await setDoc(doc(db, "invitedEmails", norm), {
     email: norm, role, invitedBy,
     invitedAt: new Date().toISOString(),
   });
@@ -292,9 +292,9 @@ export async function removeInvitedEmail(id) {
 }
 
 export async function checkInvitedEmail(email) {
-  const snap = await getDocs(query(collection(db, "invitedEmails"), where("email", "==", email.toLowerCase().trim())));
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  const snap = await getDoc(doc(db, "invitedEmails", email.toLowerCase().trim()));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() };
 }
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
