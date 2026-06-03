@@ -301,8 +301,12 @@ async function publishOneSession(page, session, assessments) {
   const copyLinkButton = page.getByRole("button", { name: "Copy Link" });
   await copyLinkButton.waitFor({ timeout: 60000 });
 
-  const viewAssessmentUrl = page.url();
-  const viewDetailsUrl    = viewAssessmentUrl.replace("/view-assessment/", "/view-details/");
+  const currentUrl = page.url();
+  const uuidMatch  = currentUrl.match(/\/(?:edit|view)-assessment\/([0-9a-f-]{36})/i);
+  if (!uuidMatch) throw new Error(`Cannot extract assessment UUID from URL: ${currentUrl}`);
+  const uuid           = uuidMatch[1];
+  const viewAssessmentUrl = `https://config.topin.tech/view-assessment/${uuid}`;
+  const viewDetailsUrl    = `https://config.topin.tech/view-details/${uuid}`;
   broadcast("info", `  Published — Config URL: ${viewAssessmentUrl}`);
 
   let assessmentLink = null;
