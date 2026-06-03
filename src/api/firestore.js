@@ -270,6 +270,33 @@ export async function bulkCreateInterviews(rows) {
   }
 }
 
+// ── Pre-invited Emails ────────────────────────────────────────────────────────
+
+export async function getInvitedEmails() {
+  const snap = await getDocs(collection(db, "invitedEmails"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function addInvitedEmail(email, role, invitedBy) {
+  const norm = email.toLowerCase().trim();
+  const existing = await getDocs(query(collection(db, "invitedEmails"), where("email", "==", norm)));
+  if (!existing.empty) throw new Error("This email is already in the invite list.");
+  await addDoc(collection(db, "invitedEmails"), {
+    email: norm, role, invitedBy,
+    invitedAt: new Date().toISOString(),
+  });
+}
+
+export async function removeInvitedEmail(id) {
+  await deleteDoc(doc(db, "invitedEmails", id));
+}
+
+export async function checkInvitedEmail(email) {
+  const snap = await getDocs(query(collection(db, "invitedEmails"), where("email", "==", email.toLowerCase().trim())));
+  if (snap.empty) return null;
+  return { id: snap.docs[0].id, ...snap.docs[0].data() };
+}
+
 // ── Logs ──────────────────────────────────────────────────────────────────────
 
 export async function createLog(data) {
