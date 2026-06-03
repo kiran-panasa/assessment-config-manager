@@ -207,11 +207,8 @@ const INTEGRITY_CONFIG = {
   enable_periodic_pin_validation: true,
 };
 
-// Normalize a tag string for Topin: & → AND, trim whitespace.
-// Raw `&` gets HTML-encoded to `&amp;` by Topin's backend on storage,
-// causing GraphQL _ilike searches to miss the tag.
 function normalizeTag(tag) {
-  return tag.replace(/&/g, "AND").trim();
+  return tag.trim();
 }
 
 // ── Datetime formatting ────────────────────────────────────────────────────────

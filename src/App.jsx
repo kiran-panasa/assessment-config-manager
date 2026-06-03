@@ -69,7 +69,7 @@ function toISODate(d) {
   const dt = new Date(d); return isNaN(dt) ? d : dt.toISOString().slice(0,10);
 }
 function buildSessionKey(skill,level,date,timeSlot) { return `${skill}||${level}||${toISODate(date)}||${minsToHHMM(timeToMins(timeSlot))}`; }
-function buildExamId(skill,level,date,timeSlot) { return `NG26_NIAT_GRIT_${skill.toUpperCase().replace(/&/g,"AND")}_L${level}_${toISODate(date)}_${minsToHHMM(timeToMins(timeSlot))}`; }
+function buildExamId(skill,level,date,timeSlot) { return `NG26_NIAT_GRIT_${skill.toUpperCase()}_L${level}_${toISODate(date)}_${minsToHHMM(timeToMins(timeSlot))}`; }
 function parseSessionSkillLevel(title) {
   if (!title) return { skill:"", level:"" };
   const m = title.match(/^(.*?)\s*-\s*(L\d+)$/i);
