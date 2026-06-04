@@ -85,6 +85,14 @@ function processBookingRows(rows, existingBids, existingSessions, assessments, b
   const newRows = rows.filter(r => !existingSet.has(r.bookingId));
   const existingSessionMap = new Map();
   existingSessions.forEach(s => { if (s.sessionKey) existingSessionMap.set(s.sessionKey, s); });
+  // One exit PIN per time slot (same slot = same PIN across all skills/levels)
+  const pinMap = new Map();
+  existingSessions.forEach(s => {
+    if (s.exitPin && s.dateOfAssessment && s.startTimeSlot) {
+      const pk = `${s.dateOfAssessment}||${minsToHHMM(timeToMins(s.startTimeSlot))}`;
+      if (!pinMap.has(pk)) pinMap.set(pk, s.exitPin);
+    }
+  });
   const seenKeys = new Set(); const newSessions=[], reusedSessions=[], warnSessions=[];
   rows.forEach(row => {
     const key = row.sessionKey; if (seenKeys.has(key)) return; seenKeys.add(key);
@@ -92,12 +100,14 @@ function processBookingRows(rows, existingBids, existingSessions, assessments, b
     const match = assessments.find(a => a.skill===row.skill && a.level===`L${row.skillLevel}`);
     const duration = parseInt(match?.duration)||0; const hasMissingConfig = !match||!match.duration;
     const startMins = timeToMins(row.timeSlot);
+    const pinKey = `${toISODate(row.contestDate)}||${minsToHHMM(startMins)}`;
+    if (!pinMap.has(pinKey)) pinMap.set(pinKey, genPin());
     const session = {
       assessmentTitle: `${row.skill} - L${row.skillLevel}`,
       dateOfAssessment: row.contestDate, startTimeSlot: minsToTime(startMins),
       endTimeSlot: minsToTime(startMins+duration+bufMins),
       uniqueExamId: buildExamId(row.skill,row.skillLevel,row.contestDate,row.timeSlot),
-      exitPin: genPin(), skill: row.skill, level: row.skillLevel, sessionKey: key, hasMissingConfig,
+      exitPin: pinMap.get(pinKey), skill: row.skill, level: row.skillLevel, sessionKey: key, hasMissingConfig,
     };
     newSessions.push(session); if (hasMissingConfig) warnSessions.push(session);
   });
