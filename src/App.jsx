@@ -40,7 +40,7 @@ const T1_COLS = [
   ["Contest Link","contestLink"],["Classroom Details","classroomDetails"],
 ];
 const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Tiny URL","Details Link"];
-const T3_COLS = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Unique Exam ID","Invite"];
+const T3_COLS = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite"];
 
 function splitCSVRow(line) {
   const vals = []; let inQ = false, cur = "";
@@ -547,7 +547,7 @@ function StudentBookings({ S, showToast }) {
               <div><div style={S.sectionTitle}>User Mapping</div><div style={{ ...S.sectionSub,marginBottom:0 }}>Each student mapped to their Unique Exam ID.</div></div>
               <div style={{ display:"flex",gap:8,alignItems:"center" }}>
                 <DateFilter dates={t3Dates} value={t3Date} onChange={v=>{ setT3Date(v); setT3Page(1); }} S={S} />
-                {t3Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>{ const h=["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Unique Exam ID","Invite Status"],esc=v=>`"${String(v??"").replace(/"/g,'""')}"`,rows=[h.map(esc).join(","),...t3Filtered.map(r=>[r.studentName,r.niatId,r.studentUid,r.skill,r.skillLevel,r.contestDate,r.timeSlot,r.uniqueExamId,r.inviteStatus==="sent"?"Sent":r.inviteStatus==="failed"?"Failed":"Not Sent"].map(esc).join(","))];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`user-mapping${t3Date!=="All"?`-${t3Date}`:""}.csv`;a.click(); }}>Download CSV</button>}
+                {t3Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>{ const h=["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite Status"],esc=v=>`"${String(v??"").replace(/"/g,'""')}"`,rows=[h.map(esc).join(","),...t3Filtered.map(r=>[r.studentName,r.niatId,r.studentUid,r.skill,r.skillLevel,r.contestDate,r.timeSlot,r.campus??"",r.uniqueExamId,r.inviteStatus==="sent"?"Sent":r.inviteStatus==="failed"?"Failed":"Not Sent"].map(esc).join(","))];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`user-mapping${t3Date!=="All"?`-${t3Date}`:""}.csv`;a.click(); }}>Download CSV</button>}
               </div>
             </div>
             <div style={S.card}>
@@ -562,6 +562,7 @@ function StudentBookings({ S, showToast }) {
                         <td style={S.td}>{row.skill||"—"}</td><td style={S.td}>{row.skillLevel||"—"}</td>
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{row.contestDate||"—"}</td>
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{row.timeSlot||"—"}</td>
+                        <td style={S.td}>{row.campus||"—"}</td>
                         <td style={{ ...S.td,fontSize:11,fontFamily:"'DM Mono',monospace",color:row.mapped?"#3b82f6":"#94a3b8" }}>{row.uniqueExamId}{!row.mapped&&<span title="No matching exam session" style={{ marginLeft:6,color:"#f5a623" }}>⚠</span>}</td>
                         <td style={S.td}>{row.inviteStatus==="sent"?<span style={S.badge("#00c896")}>Sent</span>:row.inviteStatus==="failed"?<span style={S.badge("#ff5555")}>Failed</span>:<span style={S.badge("#555a7a")}>Not Sent</span>}</td>
                       </tr>

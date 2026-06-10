@@ -8,7 +8,7 @@ const T2_FILTER_INIT = { dateOfAssessment: "All", skill: "All", level: "All", st
 
 const COLS = [
   "Student Name", "NIAT ID", "Student UID", "Skill", "Level",
-  "Contest Date", "Time Slot", "Unique Exam ID", "Invite",
+  "Contest Date", "Time Slot", "Campus", "Unique Exam ID", "Invite",
   "User Assessment Link", "TinyURL", "Config Link", "Details Link",
 ];
 const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Tiny URL","Details Link"];
@@ -177,13 +177,13 @@ export default function InvitedStudents({ S, showToast }) {
   };
 
   const downloadStudentsCSV = () => {
-    const headers = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Unique Exam ID","Invite Status","User Assessment Link","TinyURL","Config Link","Details Link"];
+    const headers = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite Status","User Assessment Link","TinyURL","Config Link","Details Link"];
     const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const csvRows = [
       headers.map(esc).join(","),
       ...filtered.map(r => [
         r.studentName, r.niatId, r.studentUid, r.skill, r.skillLevel,
-        r.contestDate, r.timeSlot, r.uniqueExamId,
+        r.contestDate, r.timeSlot, r.campus ?? "", r.uniqueExamId,
         r.inviteStatus === "sent" ? "Sent" : r.inviteStatus === "failed" ? "Failed" : "Not Sent",
         r.userAssessmentLink ?? "", r.tinyUrl ?? "", r.viewAssessmentUrl ?? "", r.viewDetailsUrl ?? "",
       ].map(esc).join(",")),
@@ -303,6 +303,7 @@ export default function InvitedStudents({ S, showToast }) {
                             <td style={S.td}>{row.skillLevel || "—"}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{row.contestDate || "—"}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{row.timeSlot || "—"}</td>
+                            <td style={S.td}>{row.campus || "—"}</td>
                             <td style={{ ...S.td, fontSize: 11, fontFamily: "'DM Mono', monospace", color: row.mapped ? "#3b82f6" : "#94a3b8" }}>
                               {row.uniqueExamId}
                               {!row.mapped && <span title="No matching exam session" style={{ marginLeft: 6, color: "#f5a623" }}>⚠</span>}
