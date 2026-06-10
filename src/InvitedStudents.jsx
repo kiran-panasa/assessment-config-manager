@@ -261,7 +261,18 @@ export default function InvitedStudents({ S, showToast }) {
           <>
             <div style={{ marginBottom: 20 }}>
               <div style={S.sectionTitle}>Invited Students</div>
-              <div style={{ ...S.sectionSub, marginBottom: 16 }}>All students with their personalised assessment links.</div>
+              <div style={{ ...S.sectionSub, marginBottom: 12 }}>All students with their personalised assessment links.</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "10px 14px", background: "#f0fdf9", border: "1px solid #bbf7e0", borderRadius: 8 }}>
+                <span style={{ fontSize: 12, fontFamily: "'Inter', sans-serif", fontWeight: 600, color: "#0f172a", whiteSpace: "nowrap" }}>Attendance Scanner Link:</span>
+                <a href="https://config.topin.tech/mark-user-attendance" target="_blank" rel="noreferrer"
+                  style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", color: "#059669", textDecoration: "none" }}>
+                  https://config.topin.tech/mark-user-attendance
+                </a>
+                <button onClick={() => copyLink("https://config.topin.tech/mark-user-attendance")}
+                  style={{ ...S.btn("secondary"), padding: "3px 10px", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>
+                  Copy
+                </button>
+              </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
                 <input type="text" placeholder="Search name, NIAT ID, UID, Exam ID…" value={search}
                   onChange={e => { setSearch(e.target.value); setPg(1); }}
