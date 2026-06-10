@@ -19,11 +19,31 @@ function broadcast(type, message, extra = {}) {
   console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
+// ── Browser launch config (module-level so /send-otp and runPublish share it) ──
+
+const UA          = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const isHeadless  = process.env.HEADLESS !== "false";
+const browserArgs = process.platform === "linux"
+  ? ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--single-process","--disable-accelerated-2d-canvas","--no-zygote"]
+  : [];
+
 // ── Cookie / HAR paths ────────────────────────────────────────────────────────
 
 const COOKIES_FILE     = "./topin-session.json";
 const NETWORK_LOG_FILE = "./topin-network-log.json";
 const HAR_FILE         = "./topin-network.har";
+
+// ── Pending OTP session (two-step login flow) ─────────────────────────────────
+// /send-otp opens browser + clicks GET OTP; /run picks it up and fills digits.
+
+let pendingOtp = null; // { browser, context, page, mobile, timer }
+
+async function clearPendingOtp() {
+  if (!pendingOtp) return;
+  clearTimeout(pendingOtp.timer);
+  await pendingOtp.browser.close().catch(() => {});
+  pendingOtp = null;
+}
 
 function parseHarToLog() {
   if (!existsSync(HAR_FILE)) return;
@@ -416,40 +436,56 @@ async function runPublish(mobile, otp, date) {
   broadcast("info", `${sessions.length} unpublished session(s)${date ? ` for ${date}` : ""}`);
 
   // ── Playwright browser automation ─────────────────────────────────────────
-  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-  const isLinux   = process.platform === "linux";
-  const isHeadless = process.env.HEADLESS !== "false";
-  const browserArgs = isLinux
-    ? ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--single-process","--disable-accelerated-2d-canvas","--no-zygote"]
-    : [];
-  const browser = await chromium.launch({ headless: isHeadless, slowMo: isHeadless ? 0 : 50, args: browserArgs });
+  let browser, context, page;
 
-  // If user supplied a fresh OTP, always do a new login — never trust cached session.
-  const hasFreshOtp = otp && otp.replace(/\D/g, "").length === 6;
-  let sessionRestored = false;
-  if (!hasFreshOtp && existsSync(COOKIES_FILE)) {
-    const checkCtx = await browser.newContext({ storageState: COOKIES_FILE, userAgent: UA });
-    const checkPage = await checkCtx.newPage();
-    await checkPage.addInitScript(() => { Object.defineProperty(navigator, "webdriver", { get: () => undefined }); });
-    sessionRestored = await tryRestoreSession(checkCtx, checkPage);
-    await checkCtx.close();
+  if (pendingOtp && pendingOtp.mobile === mobile) {
+    // ── Two-step flow: browser already at OTP input, just fill the digits ────
+    broadcast("info", "Using pending OTP session…");
+    clearTimeout(pendingOtp.timer);
+    ({ browser, context, page } = pendingOtp);
+    pendingOtp = null;
+
+    const digits = otp.replace(/\D/g, "");
+    if (digits.length !== 6) throw new Error("OTP must be exactly 6 digits.");
+    broadcast("info", "Entering OTP…");
+    const otpInputs = page.locator('input[aria-label*="Digit"], input[aria-label*="verification code"]');
+    await otpInputs.first().waitFor({ timeout: 10000 });
+    for (let i = 0; i < 6; i++) { await otpInputs.nth(i).fill(digits[i]); await page.waitForTimeout(100); }
+    await page.getByRole("button", { name: /Verify & Login/i }).click();
+    await page.waitForURL(/config\.topin\.tech/, { timeout: 90000 });
+    await page.waitForTimeout(5000);
+    await waitForPageSettled(page);
+    broadcast("success", `Logged in — ${page.url()}`);
+    await saveSession(context);
+  } else {
+    // ── Fallback: launch fresh browser (session restore or direct OTP) ───────
+    browser = await chromium.launch({ headless: isHeadless, slowMo: isHeadless ? 0 : 50, args: browserArgs });
+
+    const hasFreshOtp = otp && otp.replace(/\D/g, "").length === 6;
+    let sessionRestored = false;
+    if (!hasFreshOtp && existsSync(COOKIES_FILE)) {
+      const checkCtx = await browser.newContext({ storageState: COOKIES_FILE, userAgent: UA });
+      const checkPage = await checkCtx.newPage();
+      await checkPage.addInitScript(() => { Object.defineProperty(navigator, "webdriver", { get: () => undefined }); });
+      sessionRestored = await tryRestoreSession(checkCtx, checkPage);
+      await checkCtx.close();
+    }
+
+    context = await browser.newContext({
+      recordHar: { path: HAR_FILE }, userAgent: UA,
+      ...(sessionRestored ? { storageState: COOKIES_FILE } : {}),
+    });
+    setupTokenCapture(context, broadcast);
+    page = await context.newPage();
+    await page.addInitScript(() => { Object.defineProperty(navigator, "webdriver", { get: () => undefined }); });
+
+    if (!sessionRestored) { await loginToTopin(page, mobile, otp); await saveSession(context); }
   }
 
-  const context = await browser.newContext({
-    recordHar: { path: HAR_FILE }, userAgent: UA,
-    ...(sessionRestored ? { storageState: COOKIES_FILE } : {}),
-  });
-
-  // Capture tokens from this login so future runs skip the browser
-  setupTokenCapture(context, broadcast);
-
-  const page = await context.newPage();
-  await page.addInitScript(() => { Object.defineProperty(navigator, "webdriver", { get: () => undefined }); });
   page.setDefaultTimeout(60000);
 
   let passed = 0, failed = 0;
   try {
-    if (!sessionRestored) { await loginToTopin(page, mobile, otp); await saveSession(context); }
     for (const session of sessions) {
       if (cancelRequested) { broadcast("warn", "Cancelled."); break; }
       const num = passed + failed + 1;
@@ -614,6 +650,52 @@ router.get("/network-log", requireAuth, requireAdmin, (_req, res) => {
     const entries = JSON.parse(readFileSync(NETWORK_LOG_FILE, "utf8"));
     res.json({ count: entries.length, entries });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post("/send-otp", requireAuth, requireAdmin, async (req, res) => {
+  const { mobile } = req.body;
+  if (!mobile) return res.status(400).json({ error: "mobile required" });
+
+  await clearPendingOtp();
+
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: isHeadless, args: browserArgs });
+    const context = await browser.newContext({ recordHar: { path: HAR_FILE }, userAgent: UA });
+    setupTokenCapture(context, broadcast);
+    const page = await context.newPage();
+    await page.addInitScript(() => { Object.defineProperty(navigator, "webdriver", { get: () => undefined }); });
+
+    await page.goto("https://config.topin.tech/", { waitUntil: "domcontentloaded", timeout: 90000 });
+    await waitForPageSettled(page);
+    if (!page.url().includes("accounts.ccbp.in/login")) {
+      await page.context().clearCookies();
+      await page.goto("https://config.topin.tech/", { waitUntil: "domcontentloaded", timeout: 90000 });
+      await waitForPageSettled(page);
+    }
+    if (!page.url().includes("accounts.ccbp.in/login")) {
+      await browser.close();
+      return res.status(500).json({ error: `Could not reach Topin login page. Current URL: ${page.url()}` });
+    }
+
+    await page.locator('input[placeholder="Enter Number"]').fill(mobile);
+    await page.getByRole("button", { name: "GET OTP" }).click();
+    // Wait for OTP digit inputs to confirm the SMS was triggered
+    await page.locator('input[aria-label*="Digit"], input[aria-label*="verification code"]').first().waitFor({ timeout: 15000 });
+
+    // Auto-expire after 3 minutes
+    const timer = setTimeout(async () => {
+      await browser.close().catch(() => {});
+      pendingOtp = null;
+      broadcast("warn", "[OTP] Pending OTP session expired after 3 minutes — request a new OTP.");
+    }, 3 * 60 * 1000);
+
+    pendingOtp = { browser, context, page, mobile, timer };
+    res.json({ ok: true });
+  } catch (err) {
+    await browser?.close().catch(() => {});
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post("/run", requireAuth, requireAdmin, async (req, res) => {

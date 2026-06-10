@@ -41,6 +41,10 @@ export default function CreateAssessments({ S, showToast }) {
   const logsEndRef = useRef(null);
   const esRef = useRef(null);
 
+  // Two-step OTP state
+  const [otpState, setOtpState] = useState("idle"); // "idle" | "sending" | "ready" | "expired"
+  const [liveOtp, setLiveOtp] = useState("");
+
   // Load credentials and data from Firestore
   useEffect(() => {
     getSettings()
@@ -68,9 +72,12 @@ export default function CreateAssessments({ S, showToast }) {
     esRef.current = es;
     es.onmessage = (e) => {
       const data = JSON.parse(e.data);
+      if (data.message?.includes("[OTP] Pending OTP session expired")) setOtpState("expired");
       setLogs(prev => [...prev, { type: data.type, message: data.message, ts: data.ts || Date.now(), id: (data.ts || Date.now()) + Math.random() }]);
       if (data.type === "done") {
         setRunning(null);
+        setOtpState("idle");
+        setLiveOtp("");
         es.close();
         esRef.current = null;
         showToast(data.message);
@@ -125,6 +132,21 @@ export default function CreateAssessments({ S, showToast }) {
     }
   };
 
+  const handleSendOtp = async () => {
+    if (!getLocalServerUrl()) { showToast("Set Local Server URL in Credentials tab first.", "error"); return; }
+    if (!serverOnline) { showToast("Local server offline. Run: node src/index.js", "error"); return; }
+    if (!creds.mobile) { showToast("Enter Topin mobile number in Credentials tab first.", "error"); return; }
+    setOtpState("sending");
+    setLiveOtp("");
+    try {
+      await localApi.post("/api/publish/send-otp", { mobile: creds.mobile });
+      setOtpState("ready");
+    } catch (err) {
+      showToast(err.message || "Failed to send OTP", "error");
+      setOtpState("idle");
+    }
+  };
+
   const availableDates = useMemo(() =>
     [...new Set(examSessions.map(s => s.dateOfAssessment))].filter(Boolean).sort(),
     [examSessions]);
@@ -146,15 +168,16 @@ export default function CreateAssessments({ S, showToast }) {
   const handlePublish = async () => {
     if (!getLocalServerUrl()) { showToast("Set Local Server URL in Credentials tab first.", "error"); return; }
     if (!serverOnline) { showToast("Local server offline. Run: node src/index.js", "error"); return; }
-    if (!creds.mobile || !creds.otp) { showToast("Enter Topin mobile and OTP in Credentials tab first.", "error"); return; }
+    if (!creds.mobile) { showToast("Enter Topin mobile in Credentials tab.", "error"); return; }
+    if (otpState !== "ready") { showToast("Click Send OTP and enter the code first.", "error"); return; }
+    if (!liveOtp || liveOtp.replace(/\D/g, "").length !== 6) { showToast("Enter the 6-digit OTP.", "error"); return; }
     setLogs([]);
     setRunning("publish");
     startSSE();
     try {
       await localApi.post("/api/publish/run", {
-        mobile: creds.mobile, otp: creds.otp,
+        mobile: creds.mobile, otp: liveOtp,
         date: selDate || null,
-        topinLoginUrl: creds.topinLoginUrl || null,
       });
     } catch (err) {
       addLog("error", err.message || "Server error");
@@ -259,16 +282,12 @@ export default function CreateAssessments({ S, showToast }) {
                   Update this if the Topin login page URL ever changes — no redeploy needed.
                 </div>
               </div>
-              <div style={S.grid2}>
-                <div>
-                  <label style={S.label}>Mobile Number</label>
-                  <input style={S.input} type="tel" placeholder="9876543210"
-                    value={creds.mobile} onChange={e => setCreds(p => ({ ...p, mobile: e.target.value }))} />
-                </div>
-                <div>
-                  <label style={S.label}>Fixed OTP</label>
-                  <input style={S.input} type="text" placeholder="123456" maxLength={8}
-                    value={creds.otp} onChange={e => setCreds(p => ({ ...p, otp: e.target.value }))} />
+              <div>
+                <label style={S.label}>Mobile Number</label>
+                <input style={{ ...S.input, maxWidth: 280 }} type="tel" placeholder="9876543210"
+                  value={creds.mobile} onChange={e => setCreds(p => ({ ...p, mobile: e.target.value }))} />
+                <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
+                  Used by the "Send OTP" button on the Run tab — not stored with the OTP.
                 </div>
               </div>
             </div>
@@ -341,12 +360,52 @@ export default function CreateAssessments({ S, showToast }) {
               ))}
             </div>
 
+            {/* OTP section — two-step login */}
+            <div style={S.card}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.06em" }}>Topin Login</div>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div>
+                  <label style={S.label}>Step 1 — Request OTP</label>
+                  <button
+                    style={{ ...S.btn("secondary"), border: "1px solid #2563eb", color: "#2563eb", minWidth: 130, opacity: (otpState === "sending" || running) ? 0.5 : 1 }}
+                    disabled={otpState === "sending" || !!running}
+                    onClick={handleSendOtp}>
+                    {otpState === "sending" ? "Sending…" : "Send OTP"}
+                  </button>
+                </div>
+                <div>
+                  <label style={S.label}>Step 2 — Enter OTP from SMS</label>
+                  <input
+                    style={{ ...S.input, maxWidth: 160, letterSpacing: "0.15em",
+                      border: otpState === "ready" ? "1px solid #00c896" : undefined,
+                      opacity: otpState !== "ready" ? 0.45 : 1 }}
+                    type="text" placeholder="6-digit code" maxLength={6}
+                    value={liveOtp}
+                    readOnly={otpState !== "ready"}
+                    onChange={e => setLiveOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                </div>
+                {otpState === "ready" && (
+                  <div style={{ fontSize: 12, color: "#00c896", fontFamily: "'Inter', sans-serif", paddingBottom: 8 }}>
+                    OTP sent — check your phone
+                  </div>
+                )}
+                {otpState === "expired" && (
+                  <div style={{ fontSize: 12, color: "#ef4444", fontFamily: "'Inter', sans-serif", paddingBottom: 8 }}>
+                    OTP expired — click Send OTP again
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Action buttons */}
             <div style={{ ...S.card, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
               <div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <button style={{ ...S.btn("primary"), minWidth: 190, opacity: (running || !serverOnline) ? 0.45 : 1 }}
-                    onClick={handlePublish} disabled={!!running || !serverOnline}>
+                  <button
+                    style={{ ...S.btn("primary"), minWidth: 190,
+                      opacity: (running || !serverOnline || (otpState !== "ready") || liveOtp.length !== 6) ? 0.45 : 1 }}
+                    onClick={handlePublish}
+                    disabled={!!running || !serverOnline || otpState !== "ready" || liveOtp.length !== 6}>
                     {running === "publish" ? "Publishing…" : "Publish Sessions"}
                   </button>
                   {running === "publish" && (
