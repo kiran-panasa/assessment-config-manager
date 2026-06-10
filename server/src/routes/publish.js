@@ -424,8 +424,10 @@ async function runPublish(mobile, otp, date) {
     : [];
   const browser = await chromium.launch({ headless: isHeadless, slowMo: isHeadless ? 0 : 50, args: browserArgs });
 
+  // If user supplied a fresh OTP, always do a new login — never trust cached session.
+  const hasFreshOtp = otp && otp.replace(/\D/g, "").length === 6;
   let sessionRestored = false;
-  if (existsSync(COOKIES_FILE)) {
+  if (!hasFreshOtp && existsSync(COOKIES_FILE)) {
     const checkCtx = await browser.newContext({ storageState: COOKIES_FILE, userAgent: UA });
     const checkPage = await checkCtx.newPage();
     await checkPage.addInitScript(() => { Object.defineProperty(navigator, "webdriver", { get: () => undefined }); });
