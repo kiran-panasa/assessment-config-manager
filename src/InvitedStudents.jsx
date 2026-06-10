@@ -3,7 +3,7 @@ import { getBookings, getSessions, generateTinyUrls, updateSession } from "./api
 
 const PAGE_SIZE = 20;
 
-const FILTER_INIT = { contestDate: "All", skill: "All", level: "All", timeSlot: "All", inviteStatus: "All" };
+const FILTER_INIT = { contestDate: "All", skill: "All", level: "All", timeSlot: "All", campus: "All", inviteStatus: "All" };
 const T2_FILTER_INIT = { dateOfAssessment: "All", skill: "All", level: "All", startTimeSlot: "All", publishStatus: "All" };
 
 const COLS = [
@@ -86,6 +86,7 @@ export default function InvitedStudents({ S, showToast }) {
     skill:        ["All", ...[...new Set(rows.map(r => r.skill))].filter(Boolean).sort()],
     level:        ["All", ...[...new Set(rows.map(r => r.skillLevel))].filter(Boolean).sort()],
     timeSlot:     ["All", ...[...new Set(rows.map(r => r.timeSlot))].filter(Boolean).sort()],
+    campus:       ["All", ...[...new Set(rows.map(r => r.campus))].filter(Boolean).sort()],
     inviteStatus: ["All", "sent", "failed", "not sent"],
   }), [rows]);
 
@@ -96,6 +97,7 @@ export default function InvitedStudents({ S, showToast }) {
       if (filters.skill        !== "All" && r.skill       !== filters.skill)       return false;
       if (filters.level        !== "All" && r.skillLevel  !== filters.level)       return false;
       if (filters.timeSlot     !== "All" && r.timeSlot    !== filters.timeSlot)    return false;
+      if (filters.campus       !== "All" && r.campus      !== filters.campus)       return false;
       if (filters.inviteStatus !== "All") {
         const status = r.inviteStatus === "sent" ? "sent" : r.inviteStatus === "failed" ? "failed" : "not sent";
         if (status !== filters.inviteStatus) return false;
@@ -264,7 +266,7 @@ export default function InvitedStudents({ S, showToast }) {
                 <input type="text" placeholder="Search name, NIAT ID, UID, Exam ID…" value={search}
                   onChange={e => { setSearch(e.target.value); setPg(1); }}
                   style={{ ...S.input, margin: 0, width: 260, fontSize: 12 }} />
-                {[["contestDate","Date"],["skill","Skill"],["level","Level"],["timeSlot","Time Slot"],["inviteStatus","Invite"]].map(([key,label]) => (
+                {[["contestDate","Date"],["skill","Skill"],["level","Level"],["timeSlot","Time Slot"],["campus","Campus"],["inviteStatus","Invite"]].map(([key,label]) => (
                   <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Inter', sans-serif", fontWeight: 600, whiteSpace: "nowrap" }}>{label}</span>
                     <select style={{ ...selStyle, borderColor: filters[key] !== "All" ? "#00c896" : undefined }}
