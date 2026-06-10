@@ -150,6 +150,12 @@ export async function bulkSaveBookings(bookingOps, newSessions, batchId) {
   }
 }
 
+export async function getBookingsForDate(date) {
+  const q = query(collection(db, "bookingRows"), where("contestDate", "==", date));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
 export async function deleteBooking(id) {
   await deleteDoc(doc(db, "bookingRows", id));
 }
@@ -363,8 +369,9 @@ export async function runInvite(apiEndpoint, apiToken, date, onProgress, cancelR
       getDocs(query(collection(db, "examSessions"), where("publishStatus", "==", "published"))),
     ]);
   } else {
+    // Filter by cutoffDate to avoid reading historical rows
     [bookingsSnap, sessionsSnap] = await Promise.all([
-      getDocs(collection(db, "bookingRows")),
+      getDocs(query(collection(db, "bookingRows"), where("contestDate", ">=", cutoffDate()), orderBy("contestDate", "asc"))),
       getDocs(query(collection(db, "examSessions"), where("publishStatus", "==", "published"))),
     ]);
   }

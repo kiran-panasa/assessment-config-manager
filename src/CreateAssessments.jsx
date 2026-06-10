@@ -4,7 +4,7 @@ import {
   localApi, checkLocalHealth, localProgressStream,
   getLocalServerUrl, setLocalServerUrl,
 } from "./api/client";
-import { getSettings, saveSettings, subscribeToSessions, subscribeToBookings } from "./api/firestore";
+import { getSettings, saveSettings, getSessions, getBookingsForDate } from "./api/firestore";
 
 
 const LOG_COLOR = {
@@ -45,24 +45,29 @@ export default function CreateAssessments({ S, showToast }) {
   const [otpState, setOtpState] = useState("idle"); // "idle" | "sending" | "ready" | "expired"
   const [liveOtp, setLiveOtp] = useState("");
 
-  // Load credentials and data from Firestore
+  // Load credentials and all sessions once (for dates list) — no real-time listener
   useEffect(() => {
     getSettings()
-      .then(data => {
-        if (data) setCreds(prev => ({ ...prev, ...data }));
-        setCredsLoaded(true);
-      })
-      .catch(() => setCredsLoaded(true));
+      .then(data => { if (data) setCreds(prev => ({ ...prev, ...data })); })
+      .catch(() => {})
+      .finally(() => setCredsLoaded(true));
 
-    const unsubSessions = subscribeToSessions(data => setExamSessions(data));
-    const unsubBookings = subscribeToBookings(data => setBookingRows(data));
-    return () => { unsubSessions(); unsubBookings(); };
+    getSessions().then(data => setExamSessions(data || [])).catch(() => {});
   }, []);
+
+  // When a date is selected, load only that date's bookings — avoids reading all 1500+ rows
+  useEffect(() => {
+    if (!selDate) { setBookingRows([]); return; }
+    getBookingsForDate(selDate).then(data => setBookingRows(data || [])).catch(() => {});
+  }, [selDate]);
 
   // Redirect away from credentials tab if permission is revoked mid-session
   useEffect(() => {
     if (tab === "credentials" && !canViewCredentials) setTab("run");
   }, [canViewCredentials, tab]);
+
+  const selDateRef = useRef(selDate);
+  useEffect(() => { selDateRef.current = selDate; }, [selDate]);
 
   const startSSE = useCallback(() => {
     if (esRef.current) esRef.current.close();
@@ -81,6 +86,10 @@ export default function CreateAssessments({ S, showToast }) {
         es.close();
         esRef.current = null;
         showToast(data.message);
+        // Refresh stats after job — re-fetch only the selected date
+        getSessions().then(d => setExamSessions(d || [])).catch(() => {});
+        const d = selDateRef.current;
+        if (d) getBookingsForDate(d).then(rows => setBookingRows(rows || [])).catch(() => {});
       }
     };
     es.onerror = () => {
@@ -350,8 +359,8 @@ export default function CreateAssessments({ S, showToast }) {
               {[
                 [stats.toPublish, "To Publish",     "#f5a623"],
                 [stats.published, "Published",       "#00c896"],
-                [stats.toInvite,  "Invites Pending", "#f5a623"],
-                [stats.invited,   "Invites Sent",    "#00c896"],
+                [selDate ? stats.toInvite  : "—", "Invites Pending", "#f5a623"],
+                [selDate ? stats.invited   : "—", "Invites Sent",    "#00c896"],
               ].map(([val, lbl, color]) => (
                 <div key={lbl} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "18px 22px" }}>
                   <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 30, color }}>{val}</div>
