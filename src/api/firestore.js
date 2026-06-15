@@ -25,27 +25,8 @@ export async function getMyProfile(uid) {
 export async function createUserProfile(uid, data) {
   const existing = await getDoc(doc(db, "users", uid));
   if (existing.exists()) return { created: false, status: existing.data().status };
-
-  const email = (data.email || "").toLowerCase().trim();
-  let profileData = { ...data };
-
-  if (email) {
-    const inviteSnap = await getDoc(doc(db, "invitedEmails", email));
-    if (inviteSnap.exists()) {
-      const invite = inviteSnap.data();
-      profileData = {
-        ...profileData,
-        status: "active",
-        role: invite.role || null,
-        approvedBy: "preinvite",
-        approvedAt: new Date().toISOString(),
-      };
-      await deleteDoc(doc(db, "invitedEmails", email));
-    }
-  }
-
-  await setDoc(doc(db, "users", uid), profileData);
-  return { created: true, status: profileData.status };
+  await setDoc(doc(db, "users", uid), data);
+  return { created: true, status: data.status };
 }
 
 export async function getAllUsers() {
