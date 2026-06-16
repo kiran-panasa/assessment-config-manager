@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { getBookings, getSessions, updateSession, bulkUpdateSessionsFromCsv } from "./api/firestore";
+import { getBookings, getSessions, updateSession, bulkUpdateSessionsFromCsv, bulkSyncFromStudentsCsv } from "./api/firestore";
 
 const PAGE_SIZE = 20;
 
@@ -24,31 +24,29 @@ function deriveUserLink(assessmentLink) {
   }
 }
 
+function parseLine(line) {
+  const cells = []; let cur = "", inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') inQ = false;
+      else cur += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === ',') { cells.push(cur.trim()); cur = ""; }
+      else cur += ch;
+    }
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
 function parseCsvText(text) {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split("\n");
   if (lines.length < 2) return [];
-
-  function parseLine(line) {
-    const cells = []; let cur = "", inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (inQ) {
-        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-        else if (ch === '"') inQ = false;
-        else cur += ch;
-      } else {
-        if (ch === '"') inQ = true;
-        else if (ch === ',') { cells.push(cur.trim()); cur = ""; }
-        else cur += ch;
-      }
-    }
-    cells.push(cur.trim());
-    return cells;
-  }
-
   const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, " ").trim());
   const col = (...keys) => keys.map(k => headers.indexOf(k)).find(i => i !== -1) ?? -1;
-
   return lines.slice(1).filter(l => l.trim()).map(line => {
     const c = parseLine(line);
     const g = (idx) => (idx !== -1 ? (c[idx] ?? "").trim() : "");
@@ -62,6 +60,28 @@ function parseCsvText(text) {
       dateOfAssessment:  g(col("date")),
     };
   }).filter(r => r.uniqueExamId);
+}
+
+function parseStudentsCsvText(text) {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split("\n");
+  if (lines.length < 2) return [];
+  const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, " ").trim());
+  const col = (...keys) => keys.map(k => headers.indexOf(k)).find(i => i !== -1) ?? -1;
+  return lines.slice(1).filter(l => l.trim()).map(line => {
+    const c = parseLine(line);
+    const g = (idx) => (idx !== -1 ? (c[idx] ?? "").trim() : "");
+    const rawInvite = g(col("invite", "invite status")).toLowerCase();
+    return {
+      studentName:        g(col("student name")),
+      niatId:             g(col("niat id")),
+      studentUid:         g(col("student uid")),
+      uniqueExamId:       g(col("unique exam id")),
+      inviteStatus:       rawInvite === "sent" ? "sent" : rawInvite === "failed" ? "failed" : "not sent",
+      userAssessmentLink: g(col("user assessment link")),
+      configLink:         g(col("config link")),
+      detailsLink:        g(col("details link")),
+    };
+  }).filter(r => r.uniqueExamId || r.niatId || r.studentUid);
 }
 
 function parseSessionSkillLevel(title) {
@@ -86,10 +106,15 @@ export default function InvitedStudents({ S, showToast }) {
   const [t2Page, setT2Page]       = useState(1);
   const [markModal, setMarkModal] = useState(null);
 
-  // manual CSV upload state
+  // manual CSV upload state (Unique Assessments tab)
   const csvInputRef              = useRef(null);
   const [uploadPreview, setUploadPreview] = useState(null);
   const [uploading, setUploading]         = useState(false);
+
+  // manual CSV upload state (Invited Students tab)
+  const studentsCsvInputRef                               = useRef(null);
+  const [studentsUploadPreview, setStudentsUploadPreview] = useState(null);
+  const [studentsUploading, setStudentsUploading]         = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -235,6 +260,55 @@ export default function InvitedStudents({ S, showToast }) {
     setUploading(false);
   }, [uploadPreview, load, showToast]);
 
+  const handleStudentsCsvFile = useCallback((file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const rows = parseStudentsCsvText(e.target.result);
+      if (!rows.length) { showToast("No valid rows found. Check the CSV format.", "error"); return; }
+
+      const sessionExamIdSet = new Set(rows.map(r => r.uniqueExamId).filter(Boolean));
+      const byExamId = new Map();
+      examSessions.forEach(s => { if (s.uniqueExamId) byExamId.set(s.uniqueExamId.trim(), s); });
+      const matchedSessions  = [...sessionExamIdSet].filter(id => byExamId.has(id));
+      const notFoundSessions = [...sessionExamIdSet].filter(id => !byExamId.has(id));
+
+      const byNiatId     = new Map();
+      const byStudentUid = new Map();
+      bookingRows.forEach(b => {
+        if (b.niatId)     byNiatId.set(b.niatId.trim(), b);
+        if (b.studentUid) byStudentUid.set(b.studentUid.trim(), b);
+      });
+      const rowsWithStatus   = rows.filter(r => r.inviteStatus === "sent" || r.inviteStatus === "failed");
+      const matchedStudents  = rowsWithStatus.filter(r =>
+        (r.niatId && byNiatId.has(r.niatId.trim())) || (r.studentUid && byStudentUid.has(r.studentUid.trim()))
+      );
+      const notFoundStudents = rowsWithStatus.filter(r =>
+        !(r.niatId && byNiatId.has(r.niatId.trim())) && !(r.studentUid && byStudentUid.has(r.studentUid.trim()))
+      );
+
+      setStudentsUploadPreview({ rows, matchedSessions, notFoundSessions, matchedStudents, notFoundStudents });
+    };
+    reader.readAsText(file);
+  }, [examSessions, bookingRows, showToast]);
+
+  const handleConfirmStudentsUpload = useCallback(async () => {
+    if (!studentsUploadPreview) return;
+    setStudentsUploading(true);
+    try {
+      const result = await bulkSyncFromStudentsCsv(studentsUploadPreview.rows);
+      const parts = [];
+      if (result.sessionsUpdated) parts.push(`${result.sessionsUpdated} session(s) published`);
+      if (result.studentsUpdated) parts.push(`${result.studentsUpdated} student(s) updated`);
+      const skipped = (result.sessionsNotFound || 0) + (result.studentsNotFound || 0);
+      showToast((parts.join(", ") || "Nothing to update") + (skipped ? ` (${skipped} skipped)` : "") + ".");
+      setStudentsUploadPreview(null);
+      await load();
+    } catch (err) {
+      showToast(err.message || "Upload failed.", "error");
+    }
+    setStudentsUploading(false);
+  }, [studentsUploadPreview, load, showToast]);
+
   // ── Shared helpers ───────────────────────────────────────────────────────────
 
   const copyLink = (link) => {
@@ -297,6 +371,12 @@ export default function InvitedStudents({ S, showToast }) {
               <span style={{ fontSize: 12, color: "#94a3b8" }}>
                 {filtered.length !== rows.length ? `${filtered.length} of ${rows.length} students` : `${rows.length} students`}
               </span>
+              <input ref={studentsCsvInputRef} type="file" accept=".csv" style={{ display: "none" }}
+                onChange={e => { if (e.target.files[0]) handleStudentsCsvFile(e.target.files[0]); e.target.value = ""; }} />
+              <button onClick={() => studentsCsvInputRef.current?.click()}
+                style={{ ...S.btn("primary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap", background: "#7c3aed" }}>
+                Upload Manual CSV
+              </button>
               {filtered.length > 0 && (
                 <button onClick={downloadStudentsCSV} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>
                   Download CSV
@@ -603,6 +683,114 @@ export default function InvitedStudents({ S, showToast }) {
                 disabled={uploading || !uploadPreview.matched.length}
                 style={{ ...S.btn("primary"), padding: "10px 22px", fontSize: 13, background: "#7c3aed", opacity: (!uploadPreview.matched.length || uploading) ? 0.5 : 1 }}>
                 {uploading ? "Updating…" : `Apply ${uploadPreview.matched.length} Update(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Upload Students CSV preview modal ── */}
+      {studentsUploadPreview && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", borderRadius: 14, padding: "32px 32px 24px", width: "100%", maxWidth: 700, maxHeight: "82vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(15,23,42,0.18)" }}>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 4 }}>Upload Preview — Invited Students</div>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>Review changes before applying to Firestore.</div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+              <span style={{ ...S.badge("#00c896"), padding: "4px 14px", fontSize: 12 }}>{studentsUploadPreview.matchedSessions.length} session(s) will be published</span>
+              <span style={{ ...S.badge("#3b82f6"), padding: "4px 14px", fontSize: 12 }}>{studentsUploadPreview.matchedStudents.length} student(s) invite status updated</span>
+              {(studentsUploadPreview.notFoundSessions.length > 0 || studentsUploadPreview.notFoundStudents.length > 0) && (
+                <span style={{ ...S.badge("#f5a623"), padding: "4px 14px", fontSize: 12 }}>
+                  {studentsUploadPreview.notFoundSessions.length + studentsUploadPreview.notFoundStudents.length} not found — will be skipped
+                </span>
+              )}
+            </div>
+
+            {studentsUploadPreview.matchedSessions.length > 0 && (
+              <>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, color: "#059669", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Sessions to be marked Published</div>
+                <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", marginBottom: 18 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc" }}>
+                        {["Unique Exam ID", "User Assessment Link"].map(h => (
+                          <th key={h} style={{ ...S.th, textAlign: "left", padding: "8px 12px" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {studentsUploadPreview.matchedSessions.map((examId, i) => {
+                        const row = studentsUploadPreview.rows.find(r => r.uniqueExamId === examId);
+                        return (
+                          <tr key={i} onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                            <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", color: "#3b82f6", fontSize: 11 }}>{examId}</td>
+                            <td style={{ ...S.td, fontSize: 11, color: "#059669", fontFamily: "'DM Mono', monospace" }}>
+                              {row?.userAssessmentLink ? row.userAssessmentLink.slice(0, 50) + (row.userAssessmentLink.length > 50 ? "…" : "") : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {studentsUploadPreview.matchedStudents.length > 0 && (
+              <>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, color: "#3b82f6", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Students with invite status update</div>
+                <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", marginBottom: 18 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc" }}>
+                        {["Student Name", "NIAT ID", "Invite Status", "Unique Exam ID"].map(h => (
+                          <th key={h} style={{ ...S.th, textAlign: "left", padding: "8px 12px" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {studentsUploadPreview.matchedStudents.map((r, i) => (
+                        <tr key={i} onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          <td style={{ ...S.td, fontSize: 11 }}>{r.studentName || "—"}</td>
+                          <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.niatId || "—"}</td>
+                          <td style={S.td}>
+                            {r.inviteStatus === "sent" ? <span style={S.badge("#00c896")}>Sent</span>
+                              : <span style={S.badge("#ff5555")}>Failed</span>}
+                          </td>
+                          <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", color: "#3b82f6", fontSize: 11 }}>{r.uniqueExamId || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {(studentsUploadPreview.notFoundSessions.length > 0 || studentsUploadPreview.notFoundStudents.length > 0) && (
+              <>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, color: "#d97706", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Not Found in Firestore (skipped)</div>
+                <div style={{ border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px", marginBottom: 18, background: "#fffbeb" }}>
+                  {studentsUploadPreview.notFoundSessions.map((id, i) => (
+                    <div key={`s-${i}`} style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#92400e", marginBottom: 2 }}>Session: {id}</div>
+                  ))}
+                  {studentsUploadPreview.notFoundStudents.map((r, i) => (
+                    <div key={`b-${i}`} style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#92400e", marginBottom: 2 }}>Student: {r.niatId || r.studentUid || "(unknown)"}</div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 20, fontFamily: "'Inter', sans-serif" }}>
+              CSV must match the <strong>Invited Students</strong> table columns: Student Name, NIAT ID, Student UID, Unique Exam ID, Invite, User Assessment Link, Config Link, Details Link
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setStudentsUploadPreview(null)} style={{ ...S.btn("secondary"), padding: "10px 22px", fontSize: 13 }}>Cancel</button>
+              <button onClick={handleConfirmStudentsUpload}
+                disabled={studentsUploading || (!studentsUploadPreview.matchedSessions.length && !studentsUploadPreview.matchedStudents.length)}
+                style={{ ...S.btn("primary"), padding: "10px 22px", fontSize: 13, background: "#7c3aed",
+                  opacity: ((!studentsUploadPreview.matchedSessions.length && !studentsUploadPreview.matchedStudents.length) || studentsUploading) ? 0.5 : 1 }}>
+                {studentsUploading ? "Syncing…" : `Apply ${studentsUploadPreview.matchedSessions.length} Session(s) + ${studentsUploadPreview.matchedStudents.length} Student(s)`}
               </button>
             </div>
           </div>

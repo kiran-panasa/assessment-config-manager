@@ -238,6 +238,81 @@ export async function bulkUpdateSessionsFromCsv(csvRows) {
   return { updated: toUpdate.length, notFound };
 }
 
+export async function bulkSyncFromStudentsCsv(csvRows) {
+  const now = new Date().toISOString();
+
+  // Build per-examId link data (first row with links wins)
+  const sessionUpdates = new Map();
+  for (const row of csvRows) {
+    if (!row.uniqueExamId) continue;
+    if (!sessionUpdates.has(row.uniqueExamId)) {
+      sessionUpdates.set(row.uniqueExamId, {
+        userAssessmentLink: row.userAssessmentLink || null,
+        configLink:         row.configLink || null,
+        detailsLink:        row.detailsLink || null,
+      });
+    }
+  }
+
+  // Update examSessions: mark published + fill links
+  const sessionsSnap = await getDocs(collection(db, "examSessions"));
+  const sessionDocMap = new Map();
+  sessionsSnap.docs.forEach(d => {
+    const uid = d.data().uniqueExamId;
+    if (uid) sessionDocMap.set(uid.trim(), d.id);
+  });
+
+  const sessionExamIds = [...sessionUpdates.keys()].filter(uid => sessionDocMap.has(uid.trim()));
+  let sessionsUpdated  = 0;
+  let sessionsNotFound = sessionUpdates.size - sessionExamIds.length;
+
+  for (let i = 0; i < sessionExamIds.length; i += 499) {
+    const batch = writeBatch(db);
+    for (const examId of sessionExamIds.slice(i, i + 499)) {
+      const docId  = sessionDocMap.get(examId.trim());
+      const links  = sessionUpdates.get(examId);
+      const update = { publishStatus: "published", publishedAt: now, publishError: null };
+      if (links.userAssessmentLink) update.assessmentLink    = links.userAssessmentLink;
+      if (links.configLink)         update.viewAssessmentUrl = links.configLink;
+      if (links.detailsLink)        update.viewDetailsUrl    = links.detailsLink;
+      batch.update(doc(db, "examSessions", docId), update);
+      sessionsUpdated++;
+    }
+    await batch.commit();
+  }
+
+  // Update bookingRows: set inviteStatus for sent/failed rows
+  const bookingsSnap = await getDocs(collection(db, "bookingRows"));
+  const byNiatId     = new Map();
+  const byStudentUid = new Map();
+  bookingsSnap.docs.forEach(d => {
+    const data = d.data();
+    if (data.niatId)     byNiatId.set(data.niatId.trim(), d.id);
+    if (data.studentUid) byStudentUid.set(data.studentUid.trim(), d.id);
+  });
+
+  const rowsToUpdate   = csvRows.filter(r => r.inviteStatus === "sent" || r.inviteStatus === "failed");
+  let studentsUpdated  = 0;
+  let studentsNotFound = 0;
+
+  for (let i = 0; i < rowsToUpdate.length; i += 499) {
+    const batch = writeBatch(db);
+    for (const row of rowsToUpdate.slice(i, i + 499)) {
+      const docId = (row.niatId     && byNiatId.get(row.niatId.trim()))
+                 || (row.studentUid && byStudentUid.get(row.studentUid.trim()));
+      if (!docId) { studentsNotFound++; continue; }
+      const update = row.inviteStatus === "sent"
+        ? { inviteStatus: "sent", invitedAt: now, inviteError: null }
+        : { inviteStatus: "failed" };
+      batch.update(doc(db, "bookingRows", docId), update);
+      studentsUpdated++;
+    }
+    await batch.commit();
+  }
+
+  return { sessionsUpdated, sessionsNotFound, studentsUpdated, studentsNotFound };
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 export async function getSettings() {
