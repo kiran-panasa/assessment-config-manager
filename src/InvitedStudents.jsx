@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { getBookings, getSessions, updateSession } from "./api/firestore";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { getBookings, getSessions, updateSession, bulkUpdateSessionsFromCsv } from "./api/firestore";
 
 const PAGE_SIZE = 20;
 
@@ -24,6 +24,46 @@ function deriveUserLink(assessmentLink) {
   }
 }
 
+function parseCsvText(text) {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split("\n");
+  if (lines.length < 2) return [];
+
+  function parseLine(line) {
+    const cells = []; let cur = "", inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQ) {
+        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') inQ = false;
+        else cur += ch;
+      } else {
+        if (ch === '"') inQ = true;
+        else if (ch === ',') { cells.push(cur.trim()); cur = ""; }
+        else cur += ch;
+      }
+    }
+    cells.push(cur.trim());
+    return cells;
+  }
+
+  const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, " ").trim());
+  const col = (...keys) => keys.map(k => headers.indexOf(k)).find(i => i !== -1) ?? -1;
+
+  return lines.slice(1).filter(l => l.trim()).map(line => {
+    const c = parseLine(line);
+    const g = (idx) => (idx !== -1 ? (c[idx] ?? "").trim() : "");
+    return {
+      uniqueExamId:      g(col("unique exam id")),
+      topinAssessmentId: g(col("topin id")),
+      assessmentLink:    g(col("user assessment link")),
+      viewAssessmentUrl: g(col("config link")),
+      viewDetailsUrl:    g(col("details link")),
+      assessmentTitle:   g(col("assessment title")),
+      dateOfAssessment:  g(col("date")),
+    };
+  }).filter(r => r.uniqueExamId);
+}
+
 function parseSessionSkillLevel(title) {
   if (!title) return { skill: "", level: "" };
   const m = title.match(/^(.*?)\s*-\s*(L\d+)$/i);
@@ -45,6 +85,11 @@ export default function InvitedStudents({ S, showToast }) {
   const [t2Filters, setT2Filters] = useState(T2_FILTER_INIT);
   const [t2Page, setT2Page]       = useState(1);
   const [markModal, setMarkModal] = useState(null);
+
+  // manual CSV upload state
+  const csvInputRef              = useRef(null);
+  const [uploadPreview, setUploadPreview] = useState(null);
+  const [uploading, setUploading]         = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -160,6 +205,36 @@ export default function InvitedStudents({ S, showToast }) {
     } catch { showToast("Failed to update.", "error"); }
   };
 
+  // ── Manual CSV upload ────────────────────────────────────────────────────────
+
+  const handleCsvFile = useCallback((file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const rows = parseCsvText(e.target.result);
+      if (!rows.length) { showToast("No valid rows found. Check the CSV format.", "error"); return; }
+      const byExamId = new Map();
+      examSessions.forEach(s => { if (s.uniqueExamId) byExamId.set(s.uniqueExamId.trim(), s); });
+      const matched  = rows.filter(r => byExamId.has(r.uniqueExamId.trim()));
+      const notFound = rows.filter(r => !byExamId.has(r.uniqueExamId.trim()));
+      setUploadPreview({ rows, matched, notFound });
+    };
+    reader.readAsText(file);
+  }, [examSessions, showToast]);
+
+  const handleConfirmUpload = useCallback(async () => {
+    if (!uploadPreview?.matched?.length) return;
+    setUploading(true);
+    try {
+      const { updated, notFound } = await bulkUpdateSessionsFromCsv(uploadPreview.rows);
+      showToast(`${updated} session(s) updated${notFound ? `, ${notFound} Unique Exam ID(s) not found` : ""}.`);
+      setUploadPreview(null);
+      await load();
+    } catch (err) {
+      showToast(err.message || "Upload failed.", "error");
+    }
+    setUploading(false);
+  }, [uploadPreview, load, showToast]);
+
   // ── Shared helpers ───────────────────────────────────────────────────────────
 
   const copyLink = (link) => {
@@ -229,10 +304,20 @@ export default function InvitedStudents({ S, showToast }) {
               )}
             </>
           )}
-          {activeTab === "assessments" && t2Filtered.length > 0 && (
-            <button onClick={downloadAssessmentsCSV} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>
-              Download CSV
-            </button>
+          {activeTab === "assessments" && (
+            <>
+              <input ref={csvInputRef} type="file" accept=".csv" style={{ display: "none" }}
+                onChange={e => { if (e.target.files[0]) handleCsvFile(e.target.files[0]); e.target.value = ""; }} />
+              <button onClick={() => csvInputRef.current?.click()}
+                style={{ ...S.btn("primary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap", background: "#7c3aed" }}>
+                Upload Manual CSV
+              </button>
+              {t2Filtered.length > 0 && (
+                <button onClick={downloadAssessmentsCSV} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>
+                  Download CSV
+                </button>
+              )}
+            </>
           )}
           <button onClick={load} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>Refresh</button>
         </div>
@@ -455,6 +540,74 @@ export default function InvitedStudents({ S, showToast }) {
           </>
         )}
       </div>
+
+      {/* ── Upload Manual CSV preview modal ── */}
+      {uploadPreview && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", borderRadius: 14, padding: "32px 32px 24px", width: "100%", maxWidth: 660, maxHeight: "82vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(15,23,42,0.18)" }}>
+            <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 4 }}>Upload Preview</div>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>Review the matches before applying to Firestore.</div>
+
+            <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+              <span style={{ ...S.badge("#00c896"), padding: "4px 14px", fontSize: 12 }}>{uploadPreview.matched.length} will be updated</span>
+              {uploadPreview.notFound.length > 0 && (
+                <span style={{ ...S.badge("#f5a623"), padding: "4px 14px", fontSize: 12 }}>{uploadPreview.notFound.length} not found — will be skipped</span>
+              )}
+            </div>
+
+            {uploadPreview.matched.length > 0 && (
+              <>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, color: "#059669", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Sessions that will be marked Published</div>
+                <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", marginBottom: 18 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc" }}>
+                        {["Unique Exam ID", "Topin ID", "Assessment Title", "Date"].map(h => (
+                          <th key={h} style={{ ...S.th, textAlign: "left", padding: "8px 12px" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {uploadPreview.matched.map((r, i) => (
+                        <tr key={i} onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", color: "#3b82f6", fontSize: 11 }}>{r.uniqueExamId}</td>
+                          <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{r.topinAssessmentId ? r.topinAssessmentId.slice(0, 10) + "…" : "—"}</td>
+                          <td style={{ ...S.td, fontSize: 11 }}>{r.assessmentTitle || "—"}</td>
+                          <td style={{ ...S.td, fontSize: 11, whiteSpace: "nowrap" }}>{r.dateOfAssessment || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {uploadPreview.notFound.length > 0 && (
+              <>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, color: "#d97706", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Not Found in Firestore (skipped)</div>
+                <div style={{ border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px", marginBottom: 18, background: "#fffbeb" }}>
+                  {uploadPreview.notFound.map((r, i) => (
+                    <div key={i} style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#92400e", marginBottom: 2 }}>{r.uniqueExamId || "(empty)"}</div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 20, fontFamily: "'Inter', sans-serif" }}>
+              CSV must have columns: <strong>Unique Exam ID</strong>, Topin ID, User Assessment Link, Config Link, Details Link
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setUploadPreview(null)} style={{ ...S.btn("secondary"), padding: "10px 22px", fontSize: 13 }}>Cancel</button>
+              <button onClick={handleConfirmUpload}
+                disabled={uploading || !uploadPreview.matched.length}
+                style={{ ...S.btn("primary"), padding: "10px 22px", fontSize: 13, background: "#7c3aed", opacity: (!uploadPreview.matched.length || uploading) ? 0.5 : 1 }}>
+                {uploading ? "Updating…" : `Apply ${uploadPreview.matched.length} Update(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Mark Published modal ── */}
       {markModal && (

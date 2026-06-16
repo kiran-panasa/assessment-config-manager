@@ -210,6 +210,34 @@ export async function bulkDeleteSessions(ids) {
   }
 }
 
+export async function bulkUpdateSessionsFromCsv(csvRows) {
+  const snap = await getDocs(collection(db, "examSessions"));
+  const byExamId = new Map();
+  snap.docs.forEach(d => {
+    const uid = d.data().uniqueExamId;
+    if (uid) byExamId.set(uid.trim(), d.id);
+  });
+
+  const toUpdate = csvRows.filter(r => r.uniqueExamId && byExamId.has(r.uniqueExamId.trim()));
+  const notFound  = csvRows.length - toUpdate.length;
+
+  for (let i = 0; i < toUpdate.length; i += 499) {
+    const batch = writeBatch(db);
+    for (const row of toUpdate.slice(i, i + 499)) {
+      const docId  = byExamId.get(row.uniqueExamId.trim());
+      const update = { publishStatus: "published", publishedAt: new Date().toISOString(), publishError: null };
+      if (row.topinAssessmentId) update.topinAssessmentId = row.topinAssessmentId;
+      if (row.assessmentLink)    update.assessmentLink    = row.assessmentLink;
+      if (row.viewAssessmentUrl) update.viewAssessmentUrl = row.viewAssessmentUrl;
+      if (row.viewDetailsUrl)    update.viewDetailsUrl    = row.viewDetailsUrl;
+      batch.update(doc(db, "examSessions", docId), update);
+    }
+    await batch.commit();
+  }
+
+  return { updated: toUpdate.length, notFound };
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 export async function getSettings() {
