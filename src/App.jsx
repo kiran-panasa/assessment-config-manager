@@ -39,7 +39,7 @@ const T1_COLS = [
   ["Status","status"],["Student UID","studentUid"],["Booked At","bookedAt"],
   ["Contest Link","contestLink"],["Classroom Details","classroomDetails"],
 ];
-const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Tiny URL","Details Link"];
+const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
 const T3_COLS = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite"];
 
 function splitCSVRow(line) {
@@ -501,7 +501,7 @@ function StudentBookings({ S, showToast }) {
                 ))}
                 <div style={{ display:"flex",gap:8,alignItems:"flex-end",marginLeft:"auto" }}>
                   {t2AnyActive&&<button onClick={()=>{ setT2Filters(T2_FILTER_INIT); setT2Page(1); }} style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }}>Reset</button>}
-                  {t2Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>{ const h=["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Tiny URL","Details Link"],esc=v=>`"${String(v??"").replace(/"/g,'""')}"`,rows=[h.map(esc).join(","),...t2Filtered.map(s=>[s.assessmentTitle,s.dateOfAssessment,s.startTimeSlot,s.endTimeSlot,s.uniqueExamId,s.exitPin,s.topinAssessmentId??"",s.publishStatus??"pending",s.viewAssessmentUrl??"",s.assessmentLink??"",s.tinyUrl??"",s.viewDetailsUrl??""].map(esc).join(","))];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`unique-assessments${t2Filters.dateOfAssessment!=="All"?`-${t2Filters.dateOfAssessment}`:""}.csv`;a.click(); }}>Download CSV</button>}
+                  {t2Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>{ const h=["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],esc=v=>`"${String(v??"").replace(/"/g,'""')}"`,rows=[h.map(esc).join(","),...t2Filtered.map(s=>[s.assessmentTitle,s.dateOfAssessment,s.startTimeSlot,s.endTimeSlot,s.uniqueExamId,s.exitPin,s.topinAssessmentId??"",s.publishStatus??"pending",s.viewAssessmentUrl??"",s.assessmentLink??"",s.viewDetailsUrl??""].map(esc).join(","))];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`unique-assessments${t2Filters.dateOfAssessment!=="All"?`-${t2Filters.dateOfAssessment}`:""}.csv`;a.click(); }}>Download CSV</button>}
                   <button disabled={!t2AnyActive} onClick={()=>openDeleteModal("sessions")} style={{ ...S.btn("danger"),padding:"7px 16px",fontSize:12,opacity:!t2AnyActive?0.35:1 }}>Delete {t2AnyActive?`${t2Filtered.filter(s=>s.publishStatus!=="published").length} records`:"…"}</button>
                 </div>
               </div>
@@ -523,7 +523,6 @@ function StudentBookings({ S, showToast }) {
                         <td style={S.td}>{s.publishStatus==="published"?<span style={S.badge("#00c896")}>Published</span>:s.publishStatus==="failed"?<span style={S.badge("#ff5555")}>Failed</span>:<span style={S.badge("#555a7a")}>Pending</span>}</td>
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.viewAssessmentUrl?<a href={s.viewAssessmentUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6",textDecoration:"none",fontSize:11,fontFamily:"'DM Mono',monospace" }}>Config ↗</a>:<span style={{ color:"#94a3b8",fontSize:12 }}>—</span>}</td>
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.assessmentLink?<a href={s.assessmentLink} target="_blank" rel="noreferrer" style={{ color:"#3b82f6",textDecoration:"none",fontSize:11,fontFamily:"'DM Mono',monospace" }}>User Link ↗</a>:<span style={{ color:"#94a3b8",fontSize:12 }}>—</span>}</td>
-                        <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.tinyUrl?<a href={s.tinyUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6",textDecoration:"none",fontSize:11,fontFamily:"'DM Mono',monospace" }}>{s.tinyUrl.replace("https://","")}</a>:<span style={{ color:"#94a3b8",fontSize:12 }}>—</span>}</td>
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.viewDetailsUrl?<a href={s.viewDetailsUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6",textDecoration:"none",fontSize:11,fontFamily:"'DM Mono',monospace" }}>Details ↗</a>:<span style={{ color:"#94a3b8",fontSize:12 }}>—</span>}</td>
                         <td style={S.td}>
                           <div style={{ display:"flex",gap:6 }}>

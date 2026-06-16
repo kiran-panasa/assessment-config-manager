@@ -210,38 +210,6 @@ export async function bulkDeleteSessions(ids) {
   }
 }
 
-// ── TinyURL generation (client-side) ──────────────────────────────────────────
-
-export async function generateTinyUrls() {
-  const settingsSnap = await getDoc(doc(db, "settings", "automation"));
-  const token = settingsSnap.exists() ? settingsSnap.data().tinyUrlToken : null;
-  if (!token) throw new Error("TinyURL API token not set — add it in the Credentials tab.");
-
-  const q = query(collection(db, "examSessions"), where("publishStatus", "==", "published"));
-  const snap = await getDocs(q);
-  const missing = snap.docs.filter(d => !d.data().tinyUrl && d.data().assessmentLink);
-
-  let updated = 0, failed = 0;
-  for (const docSnap of missing) {
-    let userUrl = docSnap.data().assessmentLink;
-    try { const u = new URL(userUrl); u.searchParams.delete("a_t"); userUrl = u.toString(); } catch {}
-    try {
-      const r = await fetch("https://api.tinyurl.com/create", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ url: userUrl, domain: "tinyurl.com" }),
-      });
-      const data = await r.json();
-      const tinyUrl = data?.data?.tiny_url;
-      if (tinyUrl) { await updateDoc(docSnap.ref, { tinyUrl }); updated++; }
-      else failed++;
-    } catch { failed++; }
-    await new Promise(r => setTimeout(r, 150));
-  }
-
-  return { updated, failed, skipped: snap.docs.length - missing.length };
-}
-
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 export async function getSettings() {

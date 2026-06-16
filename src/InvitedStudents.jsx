@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { getBookings, getSessions, generateTinyUrls, updateSession } from "./api/firestore";
+import { getBookings, getSessions, updateSession } from "./api/firestore";
 
 const PAGE_SIZE = 20;
 
@@ -9,9 +9,9 @@ const T2_FILTER_INIT = { dateOfAssessment: "All", skill: "All", level: "All", st
 const COLS = [
   "Student Name", "NIAT ID", "Student UID", "Skill", "Level",
   "Contest Date", "Time Slot", "Campus", "Unique Exam ID", "Invite",
-  "User Assessment Link", "TinyURL", "Config Link", "Details Link",
+  "User Assessment Link", "Config Link", "Details Link",
 ];
-const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Tiny URL","Details Link"];
+const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
 
 function deriveUserLink(assessmentLink) {
   if (!assessmentLink) return null;
@@ -35,7 +35,6 @@ export default function InvitedStudents({ S, showToast }) {
   const [bookingRows, setBookingRows] = useState([]);
   const [examSessions, setExamSessions] = useState([]);
   const [loading, setLoading]         = useState(true);
-  const [generatingTiny, setGeneratingTiny] = useState(false);
 
   // students tab state
   const [filters, setFilters] = useState(FILTER_INIT);
@@ -74,7 +73,6 @@ export default function InvitedStudents({ S, showToast }) {
         ...row,
         uniqueExamId: s?.uniqueExamId ?? "—",
         userAssessmentLink: s?.assessmentLink ? deriveUserLink(s.assessmentLink) : null,
-        tinyUrl: s?.tinyUrl ?? null,
         viewAssessmentUrl: s?.viewAssessmentUrl ?? null,
         viewDetailsUrl: s?.viewDetailsUrl ?? null,
         mapped: !!s,
@@ -164,22 +162,12 @@ export default function InvitedStudents({ S, showToast }) {
 
   // ── Shared helpers ───────────────────────────────────────────────────────────
 
-  const handleGenerateTinyUrls = useCallback(async () => {
-    setGeneratingTiny(true);
-    try {
-      const res = await generateTinyUrls();
-      showToast(`TinyURLs: ${res.updated} generated, ${res.skipped} already done, ${res.failed} failed.`);
-      await load();
-    } catch (err) { showToast(err.message, "error"); }
-    setGeneratingTiny(false);
-  }, [load]);
-
   const copyLink = (link) => {
     navigator.clipboard.writeText(link).then(() => showToast("Link copied!")).catch(() => showToast("Copy failed.", "error"));
   };
 
   const downloadStudentsCSV = () => {
-    const headers = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite Status","User Assessment Link","TinyURL","Config Link","Details Link"];
+    const headers = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite Status","User Assessment Link","Config Link","Details Link"];
     const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const csvRows = [
       headers.map(esc).join(","),
@@ -187,7 +175,7 @@ export default function InvitedStudents({ S, showToast }) {
         r.studentName, r.niatId, r.studentUid, r.skill, r.skillLevel,
         r.contestDate, r.timeSlot, r.campus ?? "", r.uniqueExamId,
         r.inviteStatus === "sent" ? "Sent" : r.inviteStatus === "failed" ? "Failed" : "Not Sent",
-        r.userAssessmentLink ?? "", r.tinyUrl ?? "", r.viewAssessmentUrl ?? "", r.viewDetailsUrl ?? "",
+        r.userAssessmentLink ?? "", r.viewAssessmentUrl ?? "", r.viewDetailsUrl ?? "",
       ].map(esc).join(",")),
     ];
     const a = document.createElement("a");
@@ -197,14 +185,14 @@ export default function InvitedStudents({ S, showToast }) {
   };
 
   const downloadAssessmentsCSV = () => {
-    const h = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Tiny URL","Details Link"];
+    const h = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
     const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const csvRows = [
       h.map(esc).join(","),
       ...t2Filtered.map(s => [
         s.assessmentTitle, s.dateOfAssessment, s.startTimeSlot, s.endTimeSlot,
         s.uniqueExamId, s.exitPin, s.topinAssessmentId ?? "", s.publishStatus ?? "pending",
-        s.viewAssessmentUrl ?? "", s.assessmentLink ?? "", s.tinyUrl ?? "", s.viewDetailsUrl ?? "",
+        s.viewAssessmentUrl ?? "", s.assessmentLink ?? "", s.viewDetailsUrl ?? "",
       ].map(esc).join(",")),
     ];
     const a = document.createElement("a");
@@ -234,10 +222,6 @@ export default function InvitedStudents({ S, showToast }) {
               <span style={{ fontSize: 12, color: "#94a3b8" }}>
                 {filtered.length !== rows.length ? `${filtered.length} of ${rows.length} students` : `${rows.length} students`}
               </span>
-              <button onClick={handleGenerateTinyUrls} disabled={generatingTiny}
-                style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap", opacity: generatingTiny ? 0.5 : 1 }}>
-                {generatingTiny ? "Generating…" : "Generate TinyURLs"}
-              </button>
               {filtered.length > 0 && (
                 <button onClick={downloadStudentsCSV} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>
                   Download CSV
@@ -334,18 +318,6 @@ export default function InvitedStudents({ S, showToast }) {
                                     {row.userAssessmentLink.length > 42 ? row.userAssessmentLink.slice(0, 42) + "…" : row.userAssessmentLink}
                                   </a>
                                   <button onClick={() => copyLink(row.userAssessmentLink)}
-                                    style={{ ...S.btn("secondary"), padding: "3px 10px", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>Copy</button>
-                                </div>
-                              ) : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}
-                            </td>
-                            <td style={{ ...S.td, maxWidth: 180 }}>
-                              {row.tinyUrl ? (
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  <a href={row.tinyUrl} target="_blank" rel="noreferrer"
-                                    style={{ color: "#7c3aed", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap" }}>
-                                    {row.tinyUrl.replace("https://", "")}
-                                  </a>
-                                  <button onClick={() => copyLink(row.tinyUrl)}
                                     style={{ ...S.btn("secondary"), padding: "3px 10px", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>Copy</button>
                                 </div>
                               ) : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}
@@ -447,7 +419,6 @@ export default function InvitedStudents({ S, showToast }) {
                             <td style={S.td}>{s.publishStatus === "published" ? <span style={S.badge("#00c896")}>Published</span> : s.publishStatus === "failed" ? <span style={S.badge("#ff5555")}>Failed</span> : <span style={S.badge("#555a7a")}>Pending</span>}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.viewAssessmentUrl ? <a href={s.viewAssessmentUrl} target="_blank" rel="noreferrer" style={{ color: "#3b82f6", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace" }}>Config ↗</a> : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.assessmentLink ? <a href={s.assessmentLink} target="_blank" rel="noreferrer" style={{ color: "#3b82f6", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace" }}>User Link ↗</a> : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}</td>
-                            <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.tinyUrl ? <a href={s.tinyUrl} target="_blank" rel="noreferrer" style={{ color: "#3b82f6", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{s.tinyUrl.replace("https://", "")}</a> : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.viewDetailsUrl ? <a href={s.viewDetailsUrl} target="_blank" rel="noreferrer" style={{ color: "#3b82f6", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace" }}>Details ↗</a> : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}</td>
                             <td style={S.td}>
                               {s.publishStatus !== "published"

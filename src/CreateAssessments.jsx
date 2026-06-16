@@ -24,7 +24,6 @@ export default function CreateAssessments({ S, showToast }) {
   const [creds, setCreds] = useState({
     mobile: "", otp: "",
     apiEndpoint: "", apiToken: "",
-    tinyUrlToken: "",
     topinLoginUrl: "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp",
   });
   const [credsSaved, setCredsSaved] = useState(false);
@@ -294,19 +293,6 @@ export default function CreateAssessments({ S, showToast }) {
                   <label style={S.label}>API Key</label>
                   <input style={S.input} type="password" placeholder="X-API-KEY value…"
                     value={creds.apiToken} onChange={e => setCreds(p => ({ ...p, apiToken: e.target.value }))} />
-                </div>
-              </div>
-            </div>
-
-            {/* TinyURL */}
-            <div style={S.card}>
-              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>TinyURL</div>
-              <div>
-                <label style={S.label}>TinyURL API Token</label>
-                <input style={S.input} type="password" placeholder="TinyURL Bearer token…"
-                  value={creds.tinyUrlToken} onChange={e => setCreds(p => ({ ...p, tinyUrlToken: e.target.value }))} />
-                <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
-                  Used to auto-shorten assessment links. Get from tinyurl.com/app/settings/api.
                 </div>
               </div>
             </div>
