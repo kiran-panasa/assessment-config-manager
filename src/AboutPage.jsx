@@ -2,8 +2,8 @@ const PRINT_CSS = `
   @media print {
     @page { margin: 18mm 16mm; }
     body { background: #fff !important; }
-    aside, nav, .no-print { display: none !important; }
-    .print-root { margin-left: 0 !important; }
+    aside, .no-print { display: none !important; }
+    .app-main { margin-left: 0 !important; }
     .print-header { position: static !important; box-shadow: none !important; border-bottom: 1px solid #e2e8f0 !important; }
     a { color: inherit !important; text-decoration: none !important; }
   }

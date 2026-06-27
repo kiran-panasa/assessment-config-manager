@@ -871,7 +871,7 @@ function AppShell() {
         </div>
       </aside>
 
-      <div style={S.main}>
+      <div style={S.main} className="app-main">
         <Routes>
           <Route path="/" element={<Navigate to={`/${allowedPages[0]||"assessments"}`} replace />} />
           <Route path="/assessments" element={allowedPages.includes("assessments")||isAdminRole ? <AssessmentsPage S={S} showToast={showToast} /> : <Navigate to={`/${allowedPages[0]||"assessments"}`} replace />} />
