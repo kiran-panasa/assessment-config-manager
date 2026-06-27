@@ -72,7 +72,7 @@ export async function checkHealth() {
 const LOCAL_SERVER_KEY = "localServerUrl";
 
 export function getLocalServerUrl() {
-  try { return localStorage.getItem(LOCAL_SERVER_KEY) || ""; } catch { return ""; }
+  try { return localStorage.getItem(LOCAL_SERVER_KEY) || "http://localhost:3001"; } catch { return "http://localhost:3001"; }
 }
 
 export function setLocalServerUrl(url) {

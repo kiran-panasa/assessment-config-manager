@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { auth } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
-import { createUserProfile } from "./api/firestore";
+import { createUserProfile, checkInvitedEmail, removeInvitedEmail } from "./api/firestore";
+import { useAuth } from "./AuthContext";
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -36,6 +37,7 @@ const EyeIcon = ({ open }) => open ? (
 );
 
 export default function LoginPage() {
+  const { refreshProfile } = useAuth();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,13 +55,17 @@ export default function LoginPage() {
     try {
       if (mode === "signup") {
         const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const invite = await checkInvitedEmail(email.trim());
         await createUserProfile(user.uid, {
           email: user.email || email.trim(),
           displayName: name.trim() || email.split("@")[0],
-          role: null,
-          status: "pending",
+          role: invite ? invite.role : null,
+          status: invite ? "active" : "pending",
           createdAt: new Date().toISOString(),
+          ...(invite && { approvedBy: invite.invitedBy, approvedAt: new Date().toISOString() }),
         });
+        if (invite) await removeInvitedEmail(invite.id);
+        if (invite) await refreshProfile();
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }

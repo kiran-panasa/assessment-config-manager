@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-import { getAllUsers, updateUser, deleteUser, getAllRoles, createRole, updateRole, deleteRole } from "./api/firestore";
+import { getAllUsers, updateUser, deleteUser, getAllRoles, createRole, updateRole, deleteRole, getInvitedEmails, addInvitedEmail, removeInvitedEmail } from "./api/firestore";
 
 const ALL_PAGES = [
   { key: "assessments",  label: "Assessment Configurations" },
@@ -53,10 +53,14 @@ export default function AdminPanel({ S, showToast }) {
   const [newRoleName, setNewRoleName] = useState("");
   const [newRolePages, setNewRolePages] = useState([]);
   const [saving, setSaving] = useState({});
+  const [invitedEmails, setInvitedEmails] = useState([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("");
+  const [inviteAdding, setInviteAdding] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [usersData, rolesData] = await Promise.all([getAllUsers(), getAllRoles()]);
+      const [usersData, rolesData, invitesData] = await Promise.all([getAllUsers(), getAllRoles(), getInvitedEmails()]);
       const sortByDate = (a, b) => {
         const aMs = a.createdAt?._seconds ? a.createdAt._seconds * 1000 : new Date(a.createdAt || 0).getTime();
         const bMs = b.createdAt?._seconds ? b.createdAt._seconds * 1000 : new Date(b.createdAt || 0).getTime();
@@ -65,6 +69,7 @@ export default function AdminPanel({ S, showToast }) {
       setPendingUsers(usersData.filter(u => u.status === "pending").sort(sortByDate));
       setActiveUsers(usersData.filter(u => u.status === "active").sort(sortByDate));
       setRoles(rolesData.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")));
+      setInvitedEmails(invitesData.sort((a, b) => new Date(b.invitedAt || 0) - new Date(a.invitedAt || 0)));
     } catch { /* silent */ }
   }, []);
 
@@ -166,6 +171,31 @@ export default function AdminPanel({ S, showToast }) {
     } catch { showToast("Failed to create role.", "error"); }
   };
 
+  const handleAddInvite = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) { showToast("Enter an email address.", "error"); return; }
+    if (!inviteRole) { showToast("Select a role.", "error"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast("Enter a valid email address.", "error"); return; }
+    setInviteAdding(true);
+    try {
+      await addInvitedEmail(email, inviteRole, currentUser?.email || currentUser?.uid || "");
+      showToast(`${email} added to invite list.`);
+      setInviteEmail(""); setInviteRole("");
+      loadData();
+    } catch (err) { showToast(err.message || "Failed to add invite.", "error"); }
+    setInviteAdding(false);
+  };
+
+  const handleRemoveInvite = async (invite) => {
+    setSavingKey(invite.id + "_inv", true);
+    try {
+      await removeInvitedEmail(invite.id);
+      showToast(`Invite removed for ${invite.email}.`);
+      loadData();
+    } catch { showToast("Failed to remove invite.", "error"); }
+    setSavingKey(invite.id + "_inv", false);
+  };
+
   const handleDeleteRole = async (role) => {
     const inUse = [...activeUsers, ...pendingUsers].some(u => u.role === role.key);
     if (inUse) { showToast("Cannot delete — users are assigned to this role.", "error"); return; }
@@ -185,6 +215,7 @@ export default function AdminPanel({ S, showToast }) {
             ["pending", `Pending (${pendingUsers.length})`],
             ["users", "All Users"],
             ["roles", "Roles & Access"],
+            ["invite", "Pre-invite"],
           ].map(([key, label]) => (
             <button key={key} style={S.navItem(activeTab === key)} onClick={() => setActiveTab(key)}>
               {label}
@@ -421,6 +452,100 @@ export default function AdminPanel({ S, showToast }) {
                 style={{ ...S.btn("primary"), padding: "10px 24px", fontSize: 13 }}>
                 Create Role
               </button>
+            </div>
+          </>
+        )}
+
+        {/* ── PRE-INVITE ── */}
+        {activeTab === "invite" && (
+          <>
+            <div style={S.sectionTitle}>Pre-invite Emails</div>
+            <div style={{ ...S.sectionSub, marginBottom: 24 }}>
+              Add email addresses below. When they sign up, they'll get immediate access with the assigned role — no approval needed.
+            </div>
+
+            {/* Add form */}
+            <div style={{ ...S.card, marginBottom: 24 }}>
+              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 14, color: "#0f172a", marginBottom: 18 }}>
+                Add Email
+              </div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <div style={{ flex: "1 1 260px" }}>
+                  <label style={labelStyle}>Email Address</label>
+                  <input
+                    style={{ ...S.input, width: "100%" }}
+                    type="email"
+                    placeholder="user@example.com"
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleAddInvite()}
+                  />
+                </div>
+                <div style={{ flex: "0 0 200px" }}>
+                  <label style={labelStyle}>Assign Role</label>
+                  <select
+                    style={{ ...S.select, width: "100%", padding: "8px 12px", fontSize: 12 }}
+                    value={inviteRole}
+                    onChange={e => setInviteRole(e.target.value)}>
+                    <option value="">— Select role —</option>
+                    {roleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                </div>
+                <button
+                  onClick={handleAddInvite}
+                  disabled={inviteAdding}
+                  style={{ ...S.btn("primary"), padding: "10px 24px", fontSize: 13, opacity: inviteAdding ? 0.6 : 1, flexShrink: 0 }}>
+                  {inviteAdding ? "Adding…" : "Add Invite"}
+                </button>
+              </div>
+            </div>
+
+            {/* Invite list */}
+            <div style={S.card}>
+              {invitedEmails.length === 0 ? (
+                <div style={{ textAlign: "center", color: "#94a3b8", padding: "50px 0", fontSize: 13 }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8", marginBottom: 8 }}>
+                    No pending invites
+                  </div>
+                  Add email addresses above to pre-authorize access.
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={S.table}>
+                    <thead>
+                      <tr>
+                        <th style={S.th}>Email</th>
+                        <th style={S.th}>Role</th>
+                        <th style={S.th}>Invited By</th>
+                        <th style={S.th}>Date</th>
+                        <th style={S.th}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invitedEmails.map(inv => (
+                        <tr key={inv.id}
+                          onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          <td style={{ ...S.td, fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{inv.email}</td>
+                          <td style={S.td}>
+                            <span style={S.badge("#3b82f6")}>{roles.find(r => r.key === inv.role)?.name || inv.role}</span>
+                          </td>
+                          <td style={{ ...S.td, fontSize: 12, color: "#64748b", fontFamily: "'DM Mono', monospace" }}>{inv.invitedBy || "—"}</td>
+                          <td style={{ ...S.td, fontSize: 12, color: "#94a3b8", whiteSpace: "nowrap" }}>{fmtDate(inv.invitedAt)}</td>
+                          <td style={S.td}>
+                            <button
+                              disabled={saving[inv.id + "_inv"]}
+                              onClick={() => handleRemoveInvite(inv)}
+                              style={{ ...S.btn("danger"), padding: "7px 18px", fontSize: 12, opacity: saving[inv.id + "_inv"] ? 0.35 : 1 }}>
+                              {saving[inv.id + "_inv"] ? "…" : "Remove"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </>
         )}

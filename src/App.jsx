@@ -40,8 +40,8 @@ const T1_COLS = [
   ["Status","status"],["Student UID","studentUid"],["Booked At","bookedAt"],
   ["Contest Link","contestLink"],["Classroom Details","classroomDetails"],
 ];
-const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","Details Link"];
-const T3_COLS = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Unique Exam ID","Invite"];
+const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
+const T3_COLS = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite"];
 
 function splitCSVRow(line) {
   const vals = []; let inQ = false, cur = "";
@@ -70,7 +70,7 @@ function toISODate(d) {
   const dt = new Date(d); return isNaN(dt) ? d : dt.toISOString().slice(0,10);
 }
 function buildSessionKey(skill,level,date,timeSlot) { return `${skill}||${level}||${toISODate(date)}||${minsToHHMM(timeToMins(timeSlot))}`; }
-function buildExamId(skill,level,date,timeSlot) { return `NG26_NIAT_GRIT_${skill.toUpperCase().replace(/&/g,"AND")}_L${level}_${toISODate(date)}_${minsToHHMM(timeToMins(timeSlot))}`; }
+function buildExamId(skill,level,date,timeSlot) { return `NG26_NIAT_GRIT_${skill.toUpperCase()}_L${level}_${toISODate(date)}_${minsToHHMM(timeToMins(timeSlot))}`; }
 function parseSessionSkillLevel(title) {
   if (!title) return { skill:"", level:"" };
   const m = title.match(/^(.*?)\s*-\s*(L\d+)$/i);
@@ -86,6 +86,14 @@ function processBookingRows(rows, existingBids, existingSessions, assessments, b
   const newRows = rows.filter(r => !existingSet.has(r.bookingId));
   const existingSessionMap = new Map();
   existingSessions.forEach(s => { if (s.sessionKey) existingSessionMap.set(s.sessionKey, s); });
+  // One exit PIN per time slot (same slot = same PIN across all skills/levels)
+  const pinMap = new Map();
+  existingSessions.forEach(s => {
+    if (s.exitPin && s.dateOfAssessment && s.startTimeSlot) {
+      const pk = `${s.dateOfAssessment}||${minsToHHMM(timeToMins(s.startTimeSlot))}`;
+      if (!pinMap.has(pk)) pinMap.set(pk, s.exitPin);
+    }
+  });
   const seenKeys = new Set(); const newSessions=[], reusedSessions=[], warnSessions=[];
   rows.forEach(row => {
     const key = row.sessionKey; if (seenKeys.has(key)) return; seenKeys.add(key);
@@ -93,12 +101,14 @@ function processBookingRows(rows, existingBids, existingSessions, assessments, b
     const match = assessments.find(a => a.skill===row.skill && a.level===`L${row.skillLevel}`);
     const duration = parseInt(match?.duration)||0; const hasMissingConfig = !match||!match.duration;
     const startMins = timeToMins(row.timeSlot);
+    const pinKey = `${toISODate(row.contestDate)}||${minsToHHMM(startMins)}`;
+    if (!pinMap.has(pinKey)) pinMap.set(pinKey, genPin());
     const session = {
       assessmentTitle: `${row.skill} - L${row.skillLevel}`,
       dateOfAssessment: row.contestDate, startTimeSlot: minsToTime(startMins),
       endTimeSlot: minsToTime(startMins+duration+bufMins),
       uniqueExamId: buildExamId(row.skill,row.skillLevel,row.contestDate,row.timeSlot),
-      exitPin: genPin(), skill: row.skill, level: row.skillLevel, sessionKey: key, hasMissingConfig,
+      exitPin: pinMap.get(pinKey), skill: row.skill, level: row.skillLevel, sessionKey: key, hasMissingConfig,
     };
     newSessions.push(session); if (hasMissingConfig) warnSessions.push(session);
   });
@@ -493,7 +503,7 @@ function StudentBookings({ S, showToast }) {
                 ))}
                 <div style={{ display:"flex",gap:8,alignItems:"flex-end",marginLeft:"auto" }}>
                   {t2AnyActive&&<button onClick={()=>{ setT2Filters(T2_FILTER_INIT); setT2Page(1); }} style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }}>Reset</button>}
-                  {t2Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>{ const h=["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","Details Link"],esc=v=>`"${String(v??"").replace(/"/g,'""')}"`,rows=[h.map(esc).join(","),...t2Filtered.map(s=>[s.assessmentTitle,s.dateOfAssessment,s.startTimeSlot,s.endTimeSlot,s.uniqueExamId,s.exitPin,s.topinAssessmentId??"",s.publishStatus??"pending",s.viewAssessmentUrl??"",s.viewDetailsUrl??""].map(esc).join(","))];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`unique-assessments${t2Filters.dateOfAssessment!=="All"?`-${t2Filters.dateOfAssessment}`:""}.csv`;a.click(); }}>Download CSV</button>}
+                  {t2Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>{ const h=["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],esc=v=>`"${String(v??"").replace(/"/g,'""')}"`,rows=[h.map(esc).join(","),...t2Filtered.map(s=>[s.assessmentTitle,s.dateOfAssessment,s.startTimeSlot,s.endTimeSlot,s.uniqueExamId,s.exitPin,s.topinAssessmentId??"",s.publishStatus??"pending",s.viewAssessmentUrl??"",s.assessmentLink??"",s.viewDetailsUrl??""].map(esc).join(","))];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`unique-assessments${t2Filters.dateOfAssessment!=="All"?`-${t2Filters.dateOfAssessment}`:""}.csv`;a.click(); }}>Download CSV</button>}
                   <button disabled={!t2AnyActive} onClick={()=>openDeleteModal("sessions")} style={{ ...S.btn("danger"),padding:"7px 16px",fontSize:12,opacity:!t2AnyActive?0.35:1 }}>Delete {t2AnyActive?`${t2Filtered.filter(s=>s.publishStatus!=="published").length} records`:"…"}</button>
                 </div>
               </div>
@@ -513,7 +523,9 @@ function StudentBookings({ S, showToast }) {
                         <td style={S.td}><span style={{ ...S.badge("#ff9966"),fontFamily:"'DM Mono',monospace",letterSpacing:"0.2em",fontSize:13 }}>{s.exitPin}</span></td>
                         <td style={{ ...S.td,fontSize:11,color:"#3b82f6",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap" }}>{s.topinAssessmentId?s.topinAssessmentId.slice(0,8)+"…":"—"}</td>
                         <td style={S.td}>{s.publishStatus==="published"?<span style={S.badge("#00c896")}>Published</span>:s.publishStatus==="failed"?<span style={S.badge("#ff5555")}>Failed</span>:<span style={S.badge("#555a7a")}>Pending</span>}</td>
-                        {[["viewAssessmentUrl","Config"],["viewDetailsUrl","Details"]].map(([field,label])=>(<td key={field} style={{ ...S.td,whiteSpace:"nowrap" }}>{s[field]?<a href={s[field]} target="_blank" rel="noreferrer" style={{ color:"#3b82f6",textDecoration:"none",fontSize:11,fontFamily:"'DM Mono',monospace" }}>{label} ↗</a>:<span style={{ color:"#94a3b8",fontSize:12 }}>—</span>}</td>))}
+                        <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.viewAssessmentUrl?<a href={s.viewAssessmentUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6",textDecoration:"none",fontSize:11,fontFamily:"'DM Mono',monospace" }}>Config ↗</a>:<span style={{ color:"#94a3b8",fontSize:12 }}>—</span>}</td>
+                        <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.assessmentLink?<a href={s.assessmentLink} target="_blank" rel="noreferrer" style={{ color:"#3b82f6",textDecoration:"none",fontSize:11,fontFamily:"'DM Mono',monospace" }}>User Link ↗</a>:<span style={{ color:"#94a3b8",fontSize:12 }}>—</span>}</td>
+                        <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.viewDetailsUrl?<a href={s.viewDetailsUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6",textDecoration:"none",fontSize:11,fontFamily:"'DM Mono',monospace" }}>Details ↗</a>:<span style={{ color:"#94a3b8",fontSize:12 }}>—</span>}</td>
                         <td style={S.td}>
                           <div style={{ display:"flex",gap:6 }}>
                             {s.publishStatus!=="published"?<button onClick={()=>setMarkModal({session:s,topinId:s.topinAssessmentId||"",link:s.assessmentLink||""})} style={{ ...S.btn("secondary"),padding:"5px 10px",fontSize:11,border:"1px solid #3b82f6",color:"#3b82f6",whiteSpace:"nowrap" }}>Mark Published</button>:<button onClick={()=>handleResetSession(s.id)} style={{ ...S.btn("secondary"),padding:"5px 10px",fontSize:11,border:"1px solid #f5a623",color:"#f5a623",whiteSpace:"nowrap" }}>Reset</button>}
@@ -536,7 +548,7 @@ function StudentBookings({ S, showToast }) {
               <div><div style={S.sectionTitle}>User Mapping</div><div style={{ ...S.sectionSub,marginBottom:0 }}>Each student mapped to their Unique Exam ID.</div></div>
               <div style={{ display:"flex",gap:8,alignItems:"center" }}>
                 <DateFilter dates={t3Dates} value={t3Date} onChange={v=>{ setT3Date(v); setT3Page(1); }} S={S} />
-                {t3Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>{ const h=["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Unique Exam ID","Invite Status"],esc=v=>`"${String(v??"").replace(/"/g,'""')}"`,rows=[h.map(esc).join(","),...t3Filtered.map(r=>[r.studentName,r.niatId,r.studentUid,r.skill,r.skillLevel,r.contestDate,r.timeSlot,r.uniqueExamId,r.inviteStatus==="sent"?"Sent":r.inviteStatus==="failed"?"Failed":"Not Sent"].map(esc).join(","))];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`user-mapping${t3Date!=="All"?`-${t3Date}`:""}.csv`;a.click(); }}>Download CSV</button>}
+                {t3Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>{ const h=["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite Status"],esc=v=>`"${String(v??"").replace(/"/g,'""')}"`,rows=[h.map(esc).join(","),...t3Filtered.map(r=>[r.studentName,r.niatId,r.studentUid,r.skill,r.skillLevel,r.contestDate,r.timeSlot,r.campus??"",r.uniqueExamId,r.inviteStatus==="sent"?"Sent":r.inviteStatus==="failed"?"Failed":"Not Sent"].map(esc).join(","))];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`user-mapping${t3Date!=="All"?`-${t3Date}`:""}.csv`;a.click(); }}>Download CSV</button>}
               </div>
             </div>
             <div style={S.card}>
@@ -551,6 +563,7 @@ function StudentBookings({ S, showToast }) {
                         <td style={S.td}>{row.skill||"—"}</td><td style={S.td}>{row.skillLevel||"—"}</td>
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{row.contestDate||"—"}</td>
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{row.timeSlot||"—"}</td>
+                        <td style={S.td}>{row.campus||"—"}</td>
                         <td style={{ ...S.td,fontSize:11,fontFamily:"'DM Mono',monospace",color:row.mapped?"#3b82f6":"#94a3b8" }}>{row.uniqueExamId}{!row.mapped&&<span title="No matching exam session" style={{ marginLeft:6,color:"#f5a623" }}>⚠</span>}</td>
                         <td style={S.td}>{row.inviteStatus==="sent"?<span style={S.badge("#00c896")}>Sent</span>:row.inviteStatus==="failed"?<span style={S.badge("#ff5555")}>Failed</span>:<span style={S.badge("#555a7a")}>Not Sent</span>}</td>
                       </tr>

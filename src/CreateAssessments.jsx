@@ -4,7 +4,7 @@ import {
   localApi, checkLocalHealth, localProgressStream,
   getLocalServerUrl, setLocalServerUrl,
 } from "./api/client";
-import { getSettings, saveSettings, subscribeToSessions, subscribeToBookings } from "./api/firestore";
+import { getSettings, saveSettings, getSessions, getBookingsForDate } from "./api/firestore";
 
 
 const LOG_COLOR = {
@@ -24,7 +24,6 @@ export default function CreateAssessments({ S, showToast }) {
   const [creds, setCreds] = useState({
     mobile: "", otp: "",
     apiEndpoint: "", apiToken: "",
-    tinyUrlToken: "",
     topinLoginUrl: "https://accounts.ccbp.in/login?client_id=topin_config&auth_client_id=topin&call_back_url=https://config.topin.tech/&mode=otp",
   });
   const [credsSaved, setCredsSaved] = useState(false);
@@ -40,20 +39,24 @@ export default function CreateAssessments({ S, showToast }) {
   const [runStartTs, setRunStartTs] = useState(null);
   const logsEndRef = useRef(null);
   const esRef = useRef(null);
+  const selDateRef = useRef(selDate);
+  useEffect(() => { selDateRef.current = selDate; }, [selDate]);
 
-  // Load credentials and data from Firestore
+  // Load credentials and all sessions once (for dates list)
   useEffect(() => {
     getSettings()
-      .then(data => {
-        if (data) setCreds(prev => ({ ...prev, ...data }));
-        setCredsLoaded(true);
-      })
-      .catch(() => setCredsLoaded(true));
+      .then(data => { if (data) setCreds(prev => ({ ...prev, ...data })); })
+      .catch(() => {})
+      .finally(() => setCredsLoaded(true));
 
-    const unsubSessions = subscribeToSessions(data => setExamSessions(data));
-    const unsubBookings = subscribeToBookings(data => setBookingRows(data));
-    return () => { unsubSessions(); unsubBookings(); };
+    getSessions().then(data => setExamSessions(data || [])).catch(() => {});
   }, []);
+
+  // When a date is selected, load only that date's bookings
+  useEffect(() => {
+    if (!selDate) { setBookingRows([]); return; }
+    getBookingsForDate(selDate).then(data => setBookingRows(data || [])).catch(() => {});
+  }, [selDate]);
 
   // Redirect away from credentials tab if permission is revoked mid-session
   useEffect(() => {
@@ -74,6 +77,10 @@ export default function CreateAssessments({ S, showToast }) {
         es.close();
         esRef.current = null;
         showToast(data.message);
+        // Refresh stats after job
+        getSessions().then(d => setExamSessions(d || [])).catch(() => {});
+        const d = selDateRef.current;
+        if (d) getBookingsForDate(d).then(rows => setBookingRows(rows || [])).catch(() => {});
       }
     };
     es.onerror = () => {
@@ -183,7 +190,6 @@ export default function CreateAssessments({ S, showToast }) {
   };
 
   const cancelJob = async () => {
-    cancelRef.current = true;
     try { await localApi.post("/api/publish/cancel"); } catch { /* best-effort */ }
     setRunning(null);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
@@ -213,13 +219,7 @@ export default function CreateAssessments({ S, showToast }) {
       <div style={S.body}>
 
         {/* ── Offline warning ── */}
-        {!getLocalServerUrl() && (
-          <div style={{ marginBottom: 24, padding: "16px 20px", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 8, fontSize: 12, color: "#92400e", lineHeight: 1.9 }}>
-            <strong>Local Server URL not set.</strong>{" "}
-            Go to <strong>Credentials</strong> tab and enter <code style={{ background: "#1e293b", padding: "2px 6px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>http://localhost:3001</code>, then run <code style={{ background: "#1e293b", padding: "2px 6px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>node src/index.js</code> locally to publish.
-          </div>
-        )}
-        {getLocalServerUrl() && serverOnline === false && (
+        {serverOnline === false && (
           <div style={{ marginBottom: 24, padding: "16px 20px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 12, color: "#dc2626", lineHeight: 1.9 }}>
             <strong>Local server offline.</strong>{" "}
             Run <code style={{ background: "#1e293b", padding: "2px 6px", borderRadius: 4, fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>node src/index.js</code> in the server directory, then refresh.
@@ -273,7 +273,7 @@ export default function CreateAssessments({ S, showToast }) {
                     value={creds.mobile} onChange={e => setCreds(p => ({ ...p, mobile: e.target.value }))} />
                 </div>
                 <div>
-                  <label style={S.label}>Fixed OTP</label>
+                  <label style={S.label}>OTP</label>
                   <input style={S.input} type="text" placeholder="123456" maxLength={8}
                     value={creds.otp} onChange={e => setCreds(p => ({ ...p, otp: e.target.value }))} />
                 </div>
@@ -293,19 +293,6 @@ export default function CreateAssessments({ S, showToast }) {
                   <label style={S.label}>API Key</label>
                   <input style={S.input} type="password" placeholder="X-API-KEY value…"
                     value={creds.apiToken} onChange={e => setCreds(p => ({ ...p, apiToken: e.target.value }))} />
-                </div>
-              </div>
-            </div>
-
-            {/* TinyURL */}
-            <div style={S.card}>
-              <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#2563eb", marginBottom: 18, textTransform: "uppercase", letterSpacing: "0.06em" }}>TinyURL</div>
-              <div>
-                <label style={S.label}>TinyURL API Token</label>
-                <input style={S.input} type="password" placeholder="TinyURL Bearer token…"
-                  value={creds.tinyUrlToken} onChange={e => setCreds(p => ({ ...p, tinyUrlToken: e.target.value }))} />
-                <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
-                  Used to auto-shorten assessment links. Get from tinyurl.com/app/settings/api.
                 </div>
               </div>
             </div>
@@ -338,8 +325,8 @@ export default function CreateAssessments({ S, showToast }) {
               {[
                 [stats.toPublish, "To Publish",     "#f5a623"],
                 [stats.published, "Published",       "#00c896"],
-                [stats.toInvite,  "Invites Pending", "#f5a623"],
-                [stats.invited,   "Invites Sent",    "#00c896"],
+                [selDate ? stats.toInvite  : "—", "Invites Pending", "#f5a623"],
+                [selDate ? stats.invited   : "—", "Invites Sent",    "#00c896"],
               ].map(([val, lbl, color]) => (
                 <div key={lbl} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "18px 22px" }}>
                   <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 30, color }}>{val}</div>

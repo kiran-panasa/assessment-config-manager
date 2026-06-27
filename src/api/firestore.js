@@ -150,6 +150,12 @@ export async function bulkSaveBookings(bookingOps, newSessions, batchId) {
   }
 }
 
+export async function getBookingsForDate(date) {
+  const q = query(collection(db, "bookingRows"), where("contestDate", "==", date));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
 export async function deleteBooking(id) {
   await deleteDoc(doc(db, "bookingRows", id));
 }
@@ -204,36 +210,107 @@ export async function bulkDeleteSessions(ids) {
   }
 }
 
-// ── TinyURL generation (client-side) ──────────────────────────────────────────
+export async function bulkUpdateSessionsFromCsv(csvRows) {
+  const snap = await getDocs(collection(db, "examSessions"));
+  const byExamId = new Map();
+  snap.docs.forEach(d => {
+    const uid = d.data().uniqueExamId;
+    if (uid) byExamId.set(uid.trim(), d.id);
+  });
 
-export async function generateTinyUrls() {
-  const settingsSnap = await getDoc(doc(db, "settings", "automation"));
-  const token = settingsSnap.exists() ? settingsSnap.data().tinyUrlToken : null;
-  if (!token) throw new Error("TinyURL API token not set — add it in the Credentials tab.");
+  const toUpdate = csvRows.filter(r => r.uniqueExamId && byExamId.has(r.uniqueExamId.trim()));
+  const notFound  = csvRows.length - toUpdate.length;
 
-  const q = query(collection(db, "examSessions"), where("publishStatus", "==", "published"));
-  const snap = await getDocs(q);
-  const missing = snap.docs.filter(d => !d.data().tinyUrl && d.data().assessmentLink);
-
-  let updated = 0, failed = 0;
-  for (const docSnap of missing) {
-    let userUrl = docSnap.data().assessmentLink;
-    try { const u = new URL(userUrl); u.searchParams.delete("a_t"); userUrl = u.toString(); } catch {}
-    try {
-      const r = await fetch("https://api.tinyurl.com/create", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ url: userUrl, domain: "tinyurl.com" }),
-      });
-      const data = await r.json();
-      const tinyUrl = data?.data?.tiny_url;
-      if (tinyUrl) { await updateDoc(docSnap.ref, { tinyUrl }); updated++; }
-      else failed++;
-    } catch { failed++; }
-    await new Promise(r => setTimeout(r, 150));
+  for (let i = 0; i < toUpdate.length; i += 499) {
+    const batch = writeBatch(db);
+    for (const row of toUpdate.slice(i, i + 499)) {
+      const docId  = byExamId.get(row.uniqueExamId.trim());
+      const update = { publishStatus: "published", publishedAt: new Date().toISOString(), publishError: null };
+      if (row.topinAssessmentId) update.topinAssessmentId = row.topinAssessmentId;
+      if (row.assessmentLink)    update.assessmentLink    = row.assessmentLink;
+      if (row.viewAssessmentUrl) update.viewAssessmentUrl = row.viewAssessmentUrl;
+      if (row.viewDetailsUrl)    update.viewDetailsUrl    = row.viewDetailsUrl;
+      batch.update(doc(db, "examSessions", docId), update);
+    }
+    await batch.commit();
   }
 
-  return { updated, failed, skipped: snap.docs.length - missing.length };
+  return { updated: toUpdate.length, notFound };
+}
+
+export async function bulkSyncFromStudentsCsv(csvRows) {
+  const now = new Date().toISOString();
+
+  // Build per-examId link data (first row with links wins)
+  const sessionUpdates = new Map();
+  for (const row of csvRows) {
+    if (!row.uniqueExamId) continue;
+    if (!sessionUpdates.has(row.uniqueExamId)) {
+      sessionUpdates.set(row.uniqueExamId, {
+        userAssessmentLink: row.userAssessmentLink || null,
+        configLink:         row.configLink || null,
+        detailsLink:        row.detailsLink || null,
+      });
+    }
+  }
+
+  // Update examSessions: mark published + fill links
+  const sessionsSnap = await getDocs(collection(db, "examSessions"));
+  const sessionDocMap = new Map();
+  sessionsSnap.docs.forEach(d => {
+    const uid = d.data().uniqueExamId;
+    if (uid) sessionDocMap.set(uid.trim(), d.id);
+  });
+
+  const sessionExamIds = [...sessionUpdates.keys()].filter(uid => sessionDocMap.has(uid.trim()));
+  let sessionsUpdated  = 0;
+  let sessionsNotFound = sessionUpdates.size - sessionExamIds.length;
+
+  for (let i = 0; i < sessionExamIds.length; i += 499) {
+    const batch = writeBatch(db);
+    for (const examId of sessionExamIds.slice(i, i + 499)) {
+      const docId  = sessionDocMap.get(examId.trim());
+      const links  = sessionUpdates.get(examId);
+      const update = { publishStatus: "published", publishedAt: now, publishError: null };
+      if (links.userAssessmentLink) update.assessmentLink    = links.userAssessmentLink;
+      if (links.configLink)         update.viewAssessmentUrl = links.configLink;
+      if (links.detailsLink)        update.viewDetailsUrl    = links.detailsLink;
+      batch.update(doc(db, "examSessions", docId), update);
+      sessionsUpdated++;
+    }
+    await batch.commit();
+  }
+
+  // Update bookingRows: set inviteStatus for sent/failed rows
+  const bookingsSnap = await getDocs(collection(db, "bookingRows"));
+  const byNiatId     = new Map();
+  const byStudentUid = new Map();
+  bookingsSnap.docs.forEach(d => {
+    const data = d.data();
+    if (data.niatId)     byNiatId.set(data.niatId.trim(), d.id);
+    if (data.studentUid) byStudentUid.set(data.studentUid.trim(), d.id);
+  });
+
+  const rowsToUpdate   = csvRows.filter(r => r.inviteStatus === "sent" || r.inviteStatus === "failed");
+  let studentsUpdated  = 0;
+  let studentsNotFound = 0;
+
+  for (let i = 0; i < rowsToUpdate.length; i += 499) {
+    const batch = writeBatch(db);
+    for (const row of rowsToUpdate.slice(i, i + 499)) {
+      const docId = (row.niatId     && byNiatId.get(row.niatId.trim()))
+                 || (row.studentUid && byStudentUid.get(row.studentUid.trim()));
+      if (!docId) { studentsNotFound++; continue; }
+      const update = row.inviteStatus === "sent"
+        ? { inviteStatus: "sent", invitedAt: now, inviteError: null }
+        : { inviteStatus: "failed" };
+      batch.update(doc(db, "bookingRows", docId), update);
+      studentsUpdated++;
+    }
+    await batch.commit();
+  }
+
+  return { sessionsUpdated, sessionsNotFound, studentsUpdated, studentsNotFound };
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -268,6 +345,33 @@ export async function bulkCreateInterviews(rows) {
     }
     await batch.commit();
   }
+}
+
+// ── Pre-invited Emails ────────────────────────────────────────────────────────
+
+export async function getInvitedEmails() {
+  const snap = await getDocs(collection(db, "invitedEmails"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function addInvitedEmail(email, role, invitedBy) {
+  const norm = email.toLowerCase().trim();
+  const existing = await getDoc(doc(db, "invitedEmails", norm));
+  if (existing.exists()) throw new Error("This email is already in the invite list.");
+  await setDoc(doc(db, "invitedEmails", norm), {
+    email: norm, role, invitedBy,
+    invitedAt: new Date().toISOString(),
+  });
+}
+
+export async function removeInvitedEmail(id) {
+  await deleteDoc(doc(db, "invitedEmails", id));
+}
+
+export async function checkInvitedEmail(email) {
+  const snap = await getDoc(doc(db, "invitedEmails", email.toLowerCase().trim()));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() };
 }
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
@@ -336,8 +440,9 @@ export async function runInvite(apiEndpoint, apiToken, date, onProgress, cancelR
       getDocs(query(collection(db, "examSessions"), where("publishStatus", "==", "published"))),
     ]);
   } else {
+    // Filter by cutoffDate to avoid reading historical rows
     [bookingsSnap, sessionsSnap] = await Promise.all([
-      getDocs(collection(db, "bookingRows")),
+      getDocs(query(collection(db, "bookingRows"), where("contestDate", ">=", cutoffDate()), orderBy("contestDate", "asc"))),
       getDocs(query(collection(db, "examSessions"), where("publishStatus", "==", "published"))),
     ]);
   }

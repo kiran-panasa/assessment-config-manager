@@ -47,13 +47,26 @@ service cloud.firestore {
       allow read: if isAuth() && request.auth.uid == userId;
       // Admins can read all profiles
       allow read: if isAdmin();
-      // Signup: new users may only create their own doc with pending status
+      // Normal signup: pending status, no role
       allow create: if isAuth()
         && request.auth.uid == userId
         && request.resource.data.status == 'pending'
         && request.resource.data.role == null;
+      // Pre-invited signup: active status allowed if invite exists for this email
+      allow create: if isAuth()
+        && request.auth.uid == userId
+        && request.resource.data.status == 'active'
+        && exists(/databases/$(database)/documents/invitedEmails/$(request.auth.token.email.lower()));
       // Only admins can approve, change roles, or revoke
       allow update, delete: if isAdmin();
+    }
+
+    // ── Pre-invited Emails ────────────────────────────────────────────────────
+    match /invitedEmails/{email} {
+      // Admins manage invites; users can read+delete their own invite on signup
+      allow read: if isAdmin() || (isAuth() && request.auth.token.email.lower() == email);
+      allow write: if isAdmin();
+      allow delete: if isAuth() && request.auth.token.email.lower() == email;
     }
 
     // ── Roles ─────────────────────────────────────────────────────────────────

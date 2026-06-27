@@ -19,11 +19,20 @@ function broadcast(type, message, extra = {}) {
   console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
+// ── Browser launch config (module-level so /send-otp and runPublish share it) ──
+
+const UA          = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const isHeadless  = process.env.HEADLESS !== "false";
+const browserArgs = process.platform === "linux"
+  ? ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--single-process","--disable-accelerated-2d-canvas","--no-zygote"]
+  : [];
+
 // ── Cookie / HAR paths ────────────────────────────────────────────────────────
 
 const COOKIES_FILE     = "./topin-session.json";
 const NETWORK_LOG_FILE = "./topin-network-log.json";
 const HAR_FILE         = "./topin-network.har";
+
 
 function parseHarToLog() {
   if (!existsSync(HAR_FILE)) return;
@@ -201,22 +210,6 @@ async function setExamPinMode(page) {
   await ensureRadioSelected(container, "Common Start PIN");
 }
 
-// ── TinyURL helper ────────────────────────────────────────────────────────────
-
-async function createTinyUrl(longUrl) {
-  const token = process.env.TINYURL_API_TOKEN;
-  if (!token) return null;
-  try {
-    const res = await fetch("https://api.tinyurl.com/create", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ url: longUrl, domain: "tinyurl.com" }),
-    });
-    const data = await res.json();
-    return data?.data?.tiny_url || null;
-  } catch { return null; }
-}
-
 function deriveUserUrl(assessmentLink) {
   try {
     const u = new URL(assessmentLink);
@@ -268,7 +261,7 @@ async function publishOneSession(page, session, assessments) {
   }, session.uniqueExamId);
   if (!alreadyTagged) {
     const tagsInput = page.locator('[data-testid="bscd-assess-categories-input"] input').first();
-    await tagsInput.fill(session.uniqueExamId.replace(/&/g, "AND"));
+    await tagsInput.fill(session.uniqueExamId);
     await tagsInput.press("Enter");
     await page.waitForTimeout(300);
   }
@@ -301,8 +294,12 @@ async function publishOneSession(page, session, assessments) {
   const copyLinkButton = page.getByRole("button", { name: "Copy Link" });
   await copyLinkButton.waitFor({ timeout: 60000 });
 
-  const viewAssessmentUrl = page.url();
-  const viewDetailsUrl    = viewAssessmentUrl.replace("/view-assessment/", "/view-details/");
+  const currentUrl = page.url();
+  const uuidMatch  = currentUrl.match(/\/(?:edit|view)-assessment\/([0-9a-f-]{36})/i);
+  if (!uuidMatch) throw new Error(`Cannot extract assessment UUID from URL: ${currentUrl}`);
+  const uuid           = uuidMatch[1];
+  const viewAssessmentUrl = `https://config.topin.tech/view-assessment/${uuid}`;
+  const viewDetailsUrl    = `https://config.topin.tech/view-details/${uuid}`;
   broadcast("info", `  Published — Config URL: ${viewAssessmentUrl}`);
 
   let assessmentLink = null;
@@ -334,12 +331,7 @@ async function publishOneSession(page, session, assessments) {
   catch { assessmentId = assessmentLink.match(/org_id=([0-9a-f-]{36})/i)?.[1] || null; }
   if (!assessmentId) throw new Error(`Could not extract org_id from: ${assessmentLink}`);
 
-  const userUrl = deriveUserUrl(assessmentLink);
-  const tinyUrl = await createTinyUrl(userUrl);
-  if (tinyUrl) broadcast("info", `  TinyURL: ${tinyUrl}`);
-  else broadcast("info", "  TinyURL: skipped (token not set or API error)");
-
-  return { assessmentId, assessmentLink, viewAssessmentUrl, viewDetailsUrl, tinyUrl };
+  return { assessmentId, assessmentLink, viewAssessmentUrl, viewDetailsUrl };
 }
 
 // ── Topin login ───────────────────────────────────────────────────────────────
@@ -412,16 +404,12 @@ async function runPublish(mobile, otp, date) {
   broadcast("info", `${sessions.length} unpublished session(s)${date ? ` for ${date}` : ""}`);
 
   // ── Playwright browser automation ─────────────────────────────────────────
-  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-  const isLinux   = process.platform === "linux";
-  const isHeadless = process.env.HEADLESS !== "false";
-  const browserArgs = isLinux
-    ? ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--single-process","--disable-accelerated-2d-canvas","--no-zygote"]
-    : [];
   const browser = await chromium.launch({ headless: isHeadless, slowMo: isHeadless ? 0 : 50, args: browserArgs });
 
+  // If user supplied a fresh OTP, always do a new login — never trust cached session.
+  const hasFreshOtp = otp && otp.replace(/\D/g, "").length === 6;
   let sessionRestored = false;
-  if (existsSync(COOKIES_FILE)) {
+  if (!hasFreshOtp && existsSync(COOKIES_FILE)) {
     const checkCtx = await browser.newContext({ storageState: COOKIES_FILE, userAgent: UA });
     const checkPage = await checkCtx.newPage();
     await checkPage.addInitScript(() => { Object.defineProperty(navigator, "webdriver", { get: () => undefined }); });
@@ -433,10 +421,7 @@ async function runPublish(mobile, otp, date) {
     recordHar: { path: HAR_FILE }, userAgent: UA,
     ...(sessionRestored ? { storageState: COOKIES_FILE } : {}),
   });
-
-  // Capture tokens from this login so future runs skip the browser
   setupTokenCapture(context, broadcast);
-
   const page = await context.newPage();
   await page.addInitScript(() => { Object.defineProperty(navigator, "webdriver", { get: () => undefined }); });
   page.setDefaultTimeout(60000);
@@ -449,11 +434,10 @@ async function runPublish(mobile, otp, date) {
       const num = passed + failed + 1;
       broadcast("info", `\n[${num}/${sessions.length}] ${session.assessmentTitle} — ${session.dateOfAssessment} ${session.startTimeSlot}`);
       try {
-        const { assessmentId, assessmentLink, viewAssessmentUrl, viewDetailsUrl, tinyUrl } = await publishOneSession(page, session, assessments);
+        const { assessmentId, assessmentLink, viewAssessmentUrl, viewDetailsUrl } = await publishOneSession(page, session, assessments);
         await db.collection("examSessions").doc(session.id).update({
           topinAssessmentId: assessmentId, assessmentLink,
           viewAssessmentUrl, viewDetailsUrl,
-          tinyUrl: tinyUrl || null,
           publishStatus: "published", publishedAt: new Date().toISOString(),
           publishError: null,
         });

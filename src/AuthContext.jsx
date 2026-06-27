@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
   }, [loadProfile]);
 
   const refreshProfile = useCallback(() => {
-    if (auth.currentUser) loadProfile(auth.currentUser.uid);
+    if (auth.currentUser) return loadProfile(auth.currentUser.uid);
   }, [loadProfile]);
 
   return (
