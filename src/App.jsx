@@ -18,6 +18,7 @@ import AdminPanel        from "./AdminPanel";
 import LoginPage         from "./LoginPage";
 import PendingPage       from "./PendingPage";
 import InterviewerView   from "./InterviewerView";
+import AboutPage         from "./AboutPage";
 
 // ── Shared helpers (pure functions, no Firestore) ─────────────────────────────
 
@@ -143,6 +144,7 @@ const IconCreate      = ({ color }) => (<svg width="15" height="15" viewBox="0 0
 const IconInvited     = ({ color }) => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>);
 const IconAdmin       = ({ color }) => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>);
 const IconInterviews  = ({ color }) => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="9" cy="16" r="2"/><path d="M15 14h2v4h-2z"/></svg>);
+const IconAbout       = ({ color }) => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>);
 
 function Pagination({ page, total, onPage, S }) {
   const pages = Math.ceil(total/PAGE_SIZE);
@@ -823,6 +825,7 @@ function AppShell() {
     { key:"invited",     label:"Invited Students",          Icon:IconInvited },
     { key:"interviews",  label:"Interview Schedule",        Icon:IconInterviews },
     ...(isAdminRole ? [{ key:"admin", label:"Admin Panel", Icon:IconAdmin }] : []),
+    { key:"about", label:"About", Icon:IconAbout, alwaysUnlocked:true },
   ];
 
   const currentPage = location.pathname.slice(1) || "assessments";
@@ -833,9 +836,9 @@ function AppShell() {
       <aside style={S.sidebar}>
         <div style={S.sidebarBrand}><span style={S.dot} />NxtWave Admin</div>
         <nav style={S.sidebarNav}>
-          {NAV_ITEMS.map(({ key, label, Icon }) => {
+          {NAV_ITEMS.map(({ key, label, Icon, alwaysUnlocked }) => {
             const active = currentPage === key;
-            const locked = key !== "admin" && !allowedPages.includes(key);
+            const locked = !alwaysUnlocked && key !== "admin" && !allowedPages.includes(key);
             return (
               <button key={key}
                 style={{ ...S.sidebarItem(active), color:locked?"#cbd5e1":active?"#059669":"#64748b", cursor:locked?"not-allowed":"pointer" }}
@@ -864,6 +867,7 @@ function AppShell() {
           <Route path="/invited"     element={allowedPages.includes("invited")||isAdminRole     ? <InvitedStudents   S={S} showToast={showToast} /> : <Navigate to="/" replace />} />
           <Route path="/interviews"  element={allowedPages.includes("interviews")||isAdminRole  ? <InterviewerView   S={S} showToast={showToast} /> : <Navigate to="/" replace />} />
           <Route path="/admin"       element={isAdminRole ? <AdminPanel S={S} showToast={showToast} /> : <Navigate to="/" replace />} />
+          <Route path="/about"       element={<AboutPage S={S} />} />
           <Route path="*"            element={<Navigate to="/" replace />} />
         </Routes>
       </div>
