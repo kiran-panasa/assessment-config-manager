@@ -1,3 +1,14 @@
+const PRINT_CSS = `
+  @media print {
+    @page { margin: 18mm 16mm; }
+    body { background: #fff !important; }
+    aside, nav, .no-print { display: none !important; }
+    .print-root { margin-left: 0 !important; }
+    .print-header { position: static !important; box-shadow: none !important; border-bottom: 1px solid #e2e8f0 !important; }
+    a { color: inherit !important; text-decoration: none !important; }
+  }
+`;
+
 export default function AboutPage({ S }) {
   const Section = ({ title, sub, children }) => (
     <div style={{ marginBottom: 48 }}>
@@ -46,9 +57,17 @@ export default function AboutPage({ S }) {
   ];
 
   return (
-    <div style={{ animation: "fadeIn 0.2s ease" }}>
-      <div style={S.header}>
+    <div style={{ animation: "fadeIn 0.2s ease" }} className="print-root">
+      <style>{PRINT_CSS}</style>
+      <div style={S.header} className="print-header">
         <span style={S.headerTitle}>About</span>
+        <div style={{ marginLeft: "auto", paddingBottom: 18, paddingTop: 18 }} className="no-print">
+          <button
+            onClick={() => window.print()}
+            style={{ ...S.btn("secondary"), padding: "7px 18px", fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
+            ↓ Download PDF
+          </button>
+        </div>
       </div>
 
       <div style={{ ...S.body, maxWidth: 900 }}>
