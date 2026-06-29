@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import { getInterviews, bulkCreateInterviews } from "./api/firestore";
+import BadgeEligibility from "./BadgeEligibility";
 
 const PAGE_SIZE = 20;
 
@@ -248,7 +249,7 @@ export default function InterviewerView({ S, showToast }) {
         <span style={S.headerTitle}>{isAdmin ? "Interview Schedule" : "My Interviews"}</span>
         {isAdmin && (
           <nav style={S.nav}>
-            {[["all", "All Interviews"], ["upload", "Upload Schedule"]].map(([key, label]) => (
+            {[["all", "All Interviews"], ["upload", "Upload Schedule"], ["badge", "Badge Eligibility"]].map(([key, label]) => (
               <button key={key} style={S.navItem(tab === key)} onClick={() => setTab(key)}>{label}</button>
             ))}
           </nav>
@@ -321,6 +322,11 @@ export default function InterviewerView({ S, showToast }) {
               )}
             </div>
           </div>
+        )}
+
+        {/* ── BADGE ELIGIBILITY (admin only) ── */}
+        {isAdmin && tab === "badge" && (
+          <BadgeEligibility S={S} showToast={showToast} />
         )}
 
         {/* ── ALL INTERVIEWS (admin) or MY INTERVIEWS (interviewer) ── */}
