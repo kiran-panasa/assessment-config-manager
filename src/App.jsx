@@ -320,20 +320,24 @@ function StudentBookings({ S, showToast }) {
   const handleMarkPublished = async () => {
     if (!markModal || !markModal.topinId.trim()) return;
     try {
-      await updateSession(markModal.session.id, {
+      const updates = {
         topinAssessmentId: markModal.topinId.trim(), assessmentLink: markModal.link.trim() || null,
         publishStatus: "published", publishedAt: new Date().toISOString(), publishError: null,
-      });
+      };
+      await updateSession(markModal.session.id, updates);
       await createLog({ action: "manual_publish", sessionId: markModal.session.id });
-      showToast("Session marked as published."); setMarkModal(null); await loadData();
+      setExamSessions(ss => ss.map(s => s.id === markModal.session.id ? { ...s, ...updates } : s));
+      showToast("Session marked as published."); setMarkModal(null);
     } catch (err) { showToast(err.message, "error"); }
   };
 
   const handleResetSession = async (id) => {
     if (!window.confirm("Reset to Pending?")) return;
     try {
-      await updateSession(id, { publishStatus: "pending", topinAssessmentId: null, assessmentLink: null, publishError: null });
-      showToast("Session reset."); await loadData();
+      const updates = { publishStatus: "pending", topinAssessmentId: null, assessmentLink: null, publishError: null };
+      await updateSession(id, updates);
+      setExamSessions(ss => ss.map(s => s.id === id ? { ...s, ...updates } : s));
+      showToast("Session reset.");
     } catch (err) { showToast(err.message, "error"); }
   };
 
@@ -345,13 +349,18 @@ function StudentBookings({ S, showToast }) {
   const handleBulkDelete = async () => {
     if (!deleteModal||deleting) return; setDeleting(true);
     try {
-      const ids = deleteModal.toDelete.map(r => r.id);
-      if (deleteModal.table === "bookings") await bulkDeleteBookings(ids);
-      else await bulkDeleteSessions(ids);
-      await createLog({ action: "bulk_delete", table: deleteModal.table, count: deleteModal.toDelete.length });
-      showToast(`Deleted ${deleteModal.toDelete.length} records.`); setDeleteModal(null);
-      if (deleteModal.table==="bookings") { setT1Filters(T1_FILTER_INIT); setT1Page(1); } else { setT2Filters(T2_FILTER_INIT); setT2Page(1); }
-      await loadData();
+      const ids = new Set(deleteModal.toDelete.map(r => r.id));
+      if (deleteModal.table === "bookings") {
+        await bulkDeleteBookings([...ids]);
+        setBookingRows(r => r.filter(x => !ids.has(x.id)));
+        setT1Filters(T1_FILTER_INIT); setT1Page(1);
+      } else {
+        await bulkDeleteSessions([...ids]);
+        setExamSessions(s => s.filter(x => !ids.has(x.id)));
+        setT2Filters(T2_FILTER_INIT); setT2Page(1);
+      }
+      await createLog({ action: "bulk_delete", table: deleteModal.table, count: ids.size });
+      showToast(`Deleted ${ids.size} records.`); setDeleteModal(null);
     } catch (err) { showToast(err.message, "error"); }
     setDeleting(false);
   };
@@ -657,16 +666,19 @@ function AssessmentsPage({ S, showToast }) {
     if (duplicate) { showToast(`${selSkill} - ${selLevel} already exists.`, "error"); return; }
     try {
       if (editId) {
-        await updateAssessment(editId, { skill: selSkill, level: selLevel, url: configUrl.trim(), duration: selDuration });
+        const updated = { skill: selSkill, level: selLevel, url: configUrl.trim(), duration: selDuration };
+        await updateAssessment(editId, updated);
         await createLog({ action: "updated", assessmentId: editId, skill: selSkill, level: selLevel });
+        setAssessments(as => as.map(a => a.id === editId ? { ...a, ...updated } : a));
         showToast("Assessment updated.");
       } else {
-        const id = await createAssessment({ skill: selSkill, level: selLevel, url: configUrl.trim(), duration: selDuration });
+        const newDoc = { skill: selSkill, level: selLevel, url: configUrl.trim(), duration: selDuration };
+        const id = await createAssessment(newDoc);
         await createLog({ action: "created", assessmentId: id, skill: selSkill, level: selLevel });
+        setAssessments(as => [...as, { id, ...newDoc }]);
         showToast("Assessment saved.");
       }
       setSelSkill(""); setSelLevel(""); setConfigUrl(""); setSelDuration(""); setEditId(null);
-      await loadData();
     } catch (err) { showToast(err.message, "error"); }
   };
 
@@ -676,7 +688,8 @@ function AssessmentsPage({ S, showToast }) {
     try {
       await deleteAssessment(id);
       await createLog({ action: "deleted", assessmentId: id, skill: a?.skill });
-      showToast("Deleted."); await loadData();
+      setAssessments(as => as.filter(x => x.id !== id));
+      showToast("Deleted.");
     } catch (err) { showToast(err.message, "error"); }
   };
 
@@ -686,14 +699,16 @@ function AssessmentsPage({ S, showToast }) {
     try {
       await addSkill(s);
       await createLog({ action: "skill_added", skill: s });
-      setNewSkill(""); showToast("Skill added."); await loadData();
+      setSkills(sk => [...sk, s]);
+      setNewSkill(""); showToast("Skill added.");
     } catch (err) { showToast(err.message, "error"); }
   };
   const handleRemoveSkill = async (s) => {
     try {
       await removeSkill(s);
       await createLog({ action: "skill_removed", skill: s });
-      showToast("Skill removed."); await loadData();
+      setSkills(sk => sk.filter(x => x !== s));
+      showToast("Skill removed.");
     } catch (err) { showToast(err.message, "error"); }
   };
   const handleAddLevel = async () => {
@@ -702,14 +717,16 @@ function AssessmentsPage({ S, showToast }) {
     try {
       await addLevel(l);
       await createLog({ action: "level_added", level: l });
-      setNewLevel(""); showToast("Level added."); await loadData();
+      setLevels(lv => [...lv, l]);
+      setNewLevel(""); showToast("Level added.");
     } catch (err) { showToast(err.message, "error"); }
   };
   const handleRemoveLevel = async (l) => {
     try {
       await removeLevel(l);
       await createLog({ action: "level_removed", level: l });
-      showToast("Level removed."); await loadData();
+      setLevels(lv => lv.filter(x => x !== l));
+      showToast("Level removed.");
     } catch (err) { showToast(err.message, "error"); }
   };
 

@@ -328,10 +328,16 @@ export async function saveSettings(data) {
 
 export async function getInterviews(userEmail, isAdmin) {
   const snap = isAdmin
-    ? await getDocs(collection(db, "scheduledInterviews"))
+    ? await getDocs(query(
+        collection(db, "scheduledInterviews"),
+        where("interviewDate", ">=", cutoffDate()),
+        orderBy("interviewDate", "asc"),
+      ))
     : await getDocs(query(
         collection(db, "scheduledInterviews"),
         where("panelistEmail", "==", (userEmail || "").toLowerCase()),
+        where("interviewDate", ">=", cutoffDate()),
+        orderBy("interviewDate", "asc"),
       ));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
