@@ -90,14 +90,12 @@ export default function AdminPanel({ S, showToast }) {
     if (!role) { showToast("Select a role first.", "error"); return; }
     setSavingKey(user.id, true);
     try {
-      await updateUser(user.id, {
-        role, status: "active",
-        approvedBy: currentUser?.email || currentUser?.uid || "",
-        approvedAt: new Date().toISOString(),
-      });
+      const updates = { role, status: "active", approvedBy: currentUser?.email || currentUser?.uid || "", approvedAt: new Date().toISOString() };
+      await updateUser(user.id, updates);
       showToast(`${user.email} approved.`);
+      setPendingUsers(ps => ps.filter(u => u.id !== user.id));
+      setActiveUsers(as => [...as, { ...user, ...updates }]);
       setPendingRoleMap(m => { const n = { ...m }; delete n[user.id]; return n; });
-      loadData();
     } catch { showToast("Failed to approve.", "error"); }
     setSavingKey(user.id, false);
   };
@@ -117,8 +115,8 @@ export default function AdminPanel({ S, showToast }) {
     try {
       await updateUser(user.id, { role: newRole });
       showToast(`Role updated for ${user.email}.`);
+      setActiveUsers(as => as.map(u => u.id === user.id ? { ...u, role: newRole } : u));
       setUserRoleMap(m => { const n = { ...m }; delete n[user.id]; return n; });
-      loadData();
     } catch { showToast("Failed to update role.", "error"); }
     setSavingKey(user.id, false);
   };
@@ -132,7 +130,8 @@ export default function AdminPanel({ S, showToast }) {
     try {
       await updateUser(user.id, { status: "pending", role: null });
       showToast(`Access revoked for ${user.email}.`);
-      loadData();
+      setActiveUsers(as => as.filter(u => u.id !== user.id));
+      setPendingUsers(ps => [...ps, { ...user, status: "pending", role: null }]);
     } catch { showToast("Failed to revoke access.", "error"); }
     setSavingKey(user.id + "_revoke", false);
   };
@@ -143,7 +142,8 @@ export default function AdminPanel({ S, showToast }) {
     try {
       await deleteUser(user.id);
       showToast(`${user.email} deleted.`);
-      loadData();
+      setPendingUsers(ps => ps.filter(u => u.id !== user.id));
+      setActiveUsers(as => as.filter(u => u.id !== user.id));
     } catch { showToast("Failed to delete user.", "error"); }
     setSavingKey(user.id + "_delete", false);
   };
@@ -154,7 +154,7 @@ export default function AdminPanel({ S, showToast }) {
       : [...currentPages, pageKey];
     try {
       await updateRole(roleId, { pages: newPages });
-      loadData();
+      setRoles(rs => rs.map(r => r.id === roleId ? { ...r, pages: newPages } : r));
     } catch { showToast("Failed to update access.", "error"); }
   };
 
@@ -166,8 +166,8 @@ export default function AdminPanel({ S, showToast }) {
     try {
       await createRole(key, name, newRolePages);
       showToast(`Role "${name}" created.`);
+      setRoles(rs => [...rs, { id: key, key, name, pages: newRolePages || [], createdAt: new Date().toISOString() }].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")));
       setNewRoleName(""); setNewRolePages([]);
-      loadData();
     } catch { showToast("Failed to create role.", "error"); }
   };
 
@@ -177,11 +177,12 @@ export default function AdminPanel({ S, showToast }) {
     if (!inviteRole) { showToast("Select a role.", "error"); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast("Enter a valid email address.", "error"); return; }
     setInviteAdding(true);
+    const norm = email.toLowerCase().trim();
     try {
       await addInvitedEmail(email, inviteRole, currentUser?.email || currentUser?.uid || "");
       showToast(`${email} added to invite list.`);
+      setInvitedEmails(es => [{ id: norm, email: norm, role: inviteRole, invitedBy: currentUser?.email, invitedAt: new Date().toISOString() }, ...es]);
       setInviteEmail(""); setInviteRole("");
-      loadData();
     } catch (err) { showToast(err.message || "Failed to add invite.", "error"); }
     setInviteAdding(false);
   };
@@ -191,7 +192,7 @@ export default function AdminPanel({ S, showToast }) {
     try {
       await removeInvitedEmail(invite.id);
       showToast(`Invite removed for ${invite.email}.`);
-      loadData();
+      setInvitedEmails(es => es.filter(e => e.id !== invite.id));
     } catch { showToast("Failed to remove invite.", "error"); }
     setSavingKey(invite.id + "_inv", false);
   };
@@ -202,7 +203,7 @@ export default function AdminPanel({ S, showToast }) {
     try {
       await deleteRole(role.id);
       showToast(`Role "${role.name}" deleted.`);
-      loadData();
+      setRoles(rs => rs.filter(r => r.id !== role.id));
     } catch (err) { showToast(err.message || "Failed to delete role.", "error"); }
   };
 

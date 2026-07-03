@@ -1,7 +1,7 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, writeBatch, arrayUnion, arrayRemove, onSnapshot,
+  query, where, orderBy, writeBatch, arrayUnion, arrayRemove,
 } from "firebase/firestore";
 
 function cutoffDate() {
@@ -180,17 +180,21 @@ export async function getSessions() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-export async function getPublishedSessions(date) {
-  let q = query(collection(db, "examSessions"), where("publishStatus", "==", "published"));
-  const snap = await getDocs(q);
+export async function getPublishedSessions() {
+  const snap = await getDocs(query(
+    collection(db, "examSessions"),
+    where("publishStatus", "==", "published"),
+    where("dateOfAssessment", ">=", cutoffDate()),
+    orderBy("dateOfAssessment", "asc"),
+  ));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 export async function getAllSessionsForDate(date) {
-  let q = date
-    ? query(collection(db, "examSessions"), where("dateOfAssessment", "==", date))
-    : query(collection(db, "examSessions"));
-  const snap = await getDocs(q);
+  const snap = await getDocs(query(
+    collection(db, "examSessions"),
+    where("dateOfAssessment", "==", date),
+  ));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
@@ -211,7 +215,11 @@ export async function bulkDeleteSessions(ids) {
 }
 
 export async function bulkUpdateSessionsFromCsv(csvRows) {
-  const snap = await getDocs(collection(db, "examSessions"));
+  const snap = await getDocs(query(
+    collection(db, "examSessions"),
+    where("dateOfAssessment", ">=", cutoffDate()),
+    orderBy("dateOfAssessment", "asc"),
+  ));
   const byExamId = new Map();
   snap.docs.forEach(d => {
     const uid = d.data().uniqueExamId;
@@ -255,7 +263,11 @@ export async function bulkSyncFromStudentsCsv(csvRows) {
   }
 
   // Update examSessions: mark published + fill links
-  const sessionsSnap = await getDocs(collection(db, "examSessions"));
+  const sessionsSnap = await getDocs(query(
+    collection(db, "examSessions"),
+    where("dateOfAssessment", ">=", cutoffDate()),
+    orderBy("dateOfAssessment", "asc"),
+  ));
   const sessionDocMap = new Map();
   sessionsSnap.docs.forEach(d => {
     const uid = d.data().uniqueExamId;
@@ -282,7 +294,11 @@ export async function bulkSyncFromStudentsCsv(csvRows) {
   }
 
   // Update bookingRows: set inviteStatus for sent/failed rows
-  const bookingsSnap = await getDocs(collection(db, "bookingRows"));
+  const bookingsSnap = await getDocs(query(
+    collection(db, "bookingRows"),
+    where("contestDate", ">=", cutoffDate()),
+    orderBy("contestDate", "asc"),
+  ));
   const byNiatId     = new Map();
   const byStudentUid = new Map();
   bookingsSnap.docs.forEach(d => {
@@ -470,26 +486,6 @@ export async function createLog(data) {
     ...data,
     createdAt: new Date().toISOString(),
   });
-}
-
-// ── Real-time listeners ───────────────────────────────────────────────────────
-
-export function subscribeToSessions(callback) {
-  const q = query(
-    collection(db, "examSessions"),
-    where("dateOfAssessment", ">=", cutoffDate()),
-    orderBy("dateOfAssessment", "asc"),
-  );
-  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-}
-
-export function subscribeToBookings(callback) {
-  const q = query(
-    collection(db, "bookingRows"),
-    where("contestDate", ">=", cutoffDate()),
-    orderBy("contestDate", "asc"),
-  );
-  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 }
 
 // ── Invite (client-side) ──────────────────────────────────────────────────────
