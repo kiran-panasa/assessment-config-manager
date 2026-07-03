@@ -63,6 +63,15 @@ export default function CreateAssessments({ S, showToast }) {
     if (tab === "credentials" && !canViewCredentials) setTab("run");
   }, [canViewCredentials, tab]);
 
+  const MAX_LOGS = 500;
+
+  const appendLog = useCallback((entry) => {
+    setLogs(prev => {
+      const next = [...prev, entry];
+      return next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next;
+    });
+  }, []);
+
   const startSSE = useCallback(() => {
     if (esRef.current) esRef.current.close();
     const start = Date.now();
@@ -71,7 +80,7 @@ export default function CreateAssessments({ S, showToast }) {
     esRef.current = es;
     es.onmessage = (e) => {
       const data = JSON.parse(e.data);
-      setLogs(prev => [...prev, { type: data.type, message: data.message, ts: data.ts || Date.now(), id: (data.ts || Date.now()) + Math.random() }]);
+      appendLog({ type: data.type, message: data.message, ts: data.ts || Date.now(), id: (data.ts || Date.now()) + Math.random() });
       if (data.type === "done") {
         setRunning(null);
         es.close();
@@ -84,12 +93,17 @@ export default function CreateAssessments({ S, showToast }) {
       }
     };
     es.onerror = () => {
-      setLogs(prev => [...prev, { type: "error", message: "Lost connection to server.", ts: Date.now(), id: Date.now() + Math.random() }]);
+      appendLog({ type: "error", message: "Lost connection to server.", ts: Date.now(), id: Date.now() + Math.random() });
       setRunning(null);
       es.close();
       esRef.current = null;
     };
-  }, [showToast]);
+  }, [showToast, appendLog]);
+
+  // Close any open EventSource on unmount to prevent connection leaks
+  useEffect(() => {
+    return () => { if (esRef.current) { esRef.current.close(); esRef.current = null; } };
+  }, []);
 
   // Server health check (for local publish server)
   useEffect(() => {

@@ -1,19 +1,20 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "./firebase";
 import { AuthProvider, useAuth } from "./AuthContext";
 
 import { S, css } from "./styles";
-import AssessmentsPage   from "./AssessmentsPage";
-import StudentBookings   from "./StudentBookings";
-import CreateAssessments from "./CreateAssessments";
-import InvitedStudents   from "./InvitedStudents";
-import AdminPanel        from "./AdminPanel";
-import LoginPage         from "./LoginPage";
-import PendingPage       from "./PendingPage";
-import InterviewerView   from "./InterviewerView";
-import AboutPage         from "./AboutPage";
+import LoginPage  from "./LoginPage";
+import PendingPage from "./PendingPage";
+
+const AssessmentsPage   = lazy(() => import("./AssessmentsPage"));
+const StudentBookings   = lazy(() => import("./StudentBookings"));
+const CreateAssessments = lazy(() => import("./CreateAssessments"));
+const InvitedStudents   = lazy(() => import("./InvitedStudents"));
+const AdminPanel        = lazy(() => import("./AdminPanel"));
+const InterviewerView   = lazy(() => import("./InterviewerView"));
+const AboutPage         = lazy(() => import("./AboutPage"));
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ function AppShell() {
   const navigate  = useNavigate();
   const location  = useLocation();
   const [toast, setToast] = useState(null);
-  const showToast = (message, type="success") => setToast({ message, type });
+  const showToast = useCallback((message, type="success") => setToast({ message, type }), []);
 
   const prevRoleRef = useRef(null);
   useEffect(() => {
@@ -59,7 +60,7 @@ function AppShell() {
 
   const isAdminRole = userProfile.role === "admin" || userProfile.role === "super-admin";
 
-  const NAV_ITEMS = [
+  const NAV_ITEMS = useMemo(() => [
     { key:"assessments", label:"Assessment Configurations", Icon:IconAssessment },
     { key:"bookings",    label:"Student Bookings",          Icon:IconBookings },
     { key:"create",      label:"Create Assessments",        Icon:IconCreate },
@@ -67,7 +68,7 @@ function AppShell() {
     { key:"interviews",  label:"Interview Schedule",        Icon:IconInterviews },
     ...(isAdminRole ? [{ key:"admin", label:"Admin Panel", Icon:IconAdmin }] : []),
     { key:"about", label:"About", Icon:IconAbout, alwaysUnlocked:true },
-  ];
+  ], [isAdminRole]);
 
   const currentPage = location.pathname.slice(1) || "assessments";
 
@@ -100,17 +101,19 @@ function AppShell() {
       </aside>
 
       <div style={S.main} className="app-main">
-        <Routes>
-          <Route path="/" element={<Navigate to={`/${allowedPages[0]||"assessments"}`} replace />} />
-          <Route path="/assessments" element={<ProtectedRoute allowed={allowedPages.includes("assessments")||isAdminRole} fallback={`/${allowedPages[0]||"assessments"}`}><AssessmentsPage S={S} showToast={showToast} /></ProtectedRoute>} />
-          <Route path="/bookings"    element={<ProtectedRoute allowed={allowedPages.includes("bookings")||isAdminRole}><StudentBookings  S={S} showToast={showToast} /></ProtectedRoute>} />
-          <Route path="/create"      element={<ProtectedRoute allowed={allowedPages.includes("create")||isAdminRole}><CreateAssessments S={S} showToast={showToast} /></ProtectedRoute>} />
-          <Route path="/invited"     element={<ProtectedRoute allowed={allowedPages.includes("invited")||isAdminRole}><InvitedStudents   S={S} showToast={showToast} /></ProtectedRoute>} />
-          <Route path="/interviews"  element={<ProtectedRoute allowed={allowedPages.includes("interviews")||isAdminRole}><InterviewerView   S={S} showToast={showToast} /></ProtectedRoute>} />
-          <Route path="/admin"       element={<ProtectedRoute allowed={isAdminRole}><AdminPanel S={S} showToast={showToast} /></ProtectedRoute>} />
-          <Route path="/about"       element={<AboutPage S={S} />} />
-          <Route path="*"            element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense fallback={<div style={{ padding:"80px 48px",color:"#94a3b8",fontFamily:"'Inter',sans-serif",fontSize:14 }}>Loading…</div>}>
+          <Routes>
+            <Route path="/" element={<Navigate to={`/${allowedPages[0]||"assessments"}`} replace />} />
+            <Route path="/assessments" element={<ProtectedRoute allowed={allowedPages.includes("assessments")||isAdminRole} fallback={`/${allowedPages[0]||"assessments"}`}><AssessmentsPage S={S} showToast={showToast} /></ProtectedRoute>} />
+            <Route path="/bookings"    element={<ProtectedRoute allowed={allowedPages.includes("bookings")||isAdminRole}><StudentBookings  S={S} showToast={showToast} /></ProtectedRoute>} />
+            <Route path="/create"      element={<ProtectedRoute allowed={allowedPages.includes("create")||isAdminRole}><CreateAssessments S={S} showToast={showToast} /></ProtectedRoute>} />
+            <Route path="/invited"     element={<ProtectedRoute allowed={allowedPages.includes("invited")||isAdminRole}><InvitedStudents   S={S} showToast={showToast} /></ProtectedRoute>} />
+            <Route path="/interviews"  element={<ProtectedRoute allowed={allowedPages.includes("interviews")||isAdminRole}><InterviewerView   S={S} showToast={showToast} /></ProtectedRoute>} />
+            <Route path="/admin"       element={<ProtectedRoute allowed={isAdminRole}><AdminPanel S={S} showToast={showToast} /></ProtectedRoute>} />
+            <Route path="/about"       element={<AboutPage S={S} />} />
+            <Route path="*"            element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </div>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={()=>setToast(null)} />}

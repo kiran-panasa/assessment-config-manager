@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { auth } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { getMyProfile } from "./api/firestore";
@@ -50,8 +50,13 @@ export function AuthProvider({ children }) {
     if (auth.currentUser) return loadProfile(auth.currentUser.uid);
   }, [loadProfile]);
 
+  const value = useMemo(
+    () => ({ currentUser, userProfile, allowedPages, authLoading, refreshProfile }),
+    [currentUser, userProfile, allowedPages, authLoading, refreshProfile]
+  );
+
   return (
-    <AuthContext.Provider value={{ currentUser, userProfile, allowedPages, authLoading, serverWaking: false, refreshProfile }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
