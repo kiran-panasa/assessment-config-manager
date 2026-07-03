@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
-import { getBookings, getSessions } from "./api/firestore";
+import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
+import { db } from "./firebase";
+import { getBookings, cutoffDate } from "./api/firestore";
 
 const DataContext = createContext(null);
 
@@ -11,13 +13,36 @@ export function DataProvider({ children }) {
   const [bookingRows,  setBookingRows]  = useState(null);
   const [examSessions, setExamSessions] = useState(null);
 
-  const refreshData = useCallback(async () => {
-    const [bookings, sessions] = await Promise.all([getBookings(), getSessions()]);
-    setBookingRows(bookings  || []);
-    setExamSessions(sessions || []);
+  // One-shot fetch for bookings (mutated locally via optimistic updates)
+  const refreshBookings = useCallback(async () => {
+    const data = await getBookings();
+    setBookingRows(data || []);
   }, []);
 
-  useEffect(() => { refreshData(); }, [refreshData]);
+  useEffect(() => {
+    refreshBookings();
+  }, [refreshBookings]);
+
+  // Live Firestore listener for exam sessions — auto-reflects any write from any component
+  useEffect(() => {
+    const q = query(
+      collection(db, "examSessions"),
+      where("dateOfAssessment", ">=", cutoffDate()),
+      orderBy("dateOfAssessment", "asc")
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => setExamSessions(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      ()     => setExamSessions([])
+    );
+    return unsub;
+  }, []);
+
+  // refreshData refreshes bookings; sessions refresh automatically via the listener
+  const refreshData = useCallback(async () => {
+    const data = await getBookings();
+    setBookingRows(data || []);
+  }, []);
 
   const value = useMemo(() => ({
     bookingRows:  bookingRows  ?? [],

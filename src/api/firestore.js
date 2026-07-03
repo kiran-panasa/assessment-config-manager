@@ -4,7 +4,7 @@ import {
   query, where, orderBy, limit, writeBatch, arrayUnion, arrayRemove,
 } from "firebase/firestore";
 
-function cutoffDate() {
+export function cutoffDate() {
   return new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
