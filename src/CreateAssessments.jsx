@@ -4,7 +4,8 @@ import {
   localApi, checkLocalHealth, localProgressStream,
   getLocalServerUrl, setLocalServerUrl,
 } from "./api/client";
-import { getSettings, saveSettings, getSessions, getBookingsForDate } from "./api/firestore";
+import { getSettings, saveSettings, getBookingsForDate } from "./api/firestore";
+import { useData } from "./DataContext";
 
 
 const LOG_COLOR = {
@@ -18,6 +19,7 @@ const LOG_COLOR = {
 export default function CreateAssessments({ S, showToast }) {
   const { allowedPages } = useAuth();
   const canViewCredentials = allowedPages.includes("credentials");
+  const { examSessions, setExamSessions, refreshData } = useData();
   const [tab, setTab] = useState("run");
   const [serverOnline, setServerOnline] = useState(null);
 
@@ -30,7 +32,6 @@ export default function CreateAssessments({ S, showToast }) {
   const [credsLoaded, setCredsLoaded] = useState(false);
   const [localUrl, setLocalUrl] = useState(() => getLocalServerUrl());
 
-  const [examSessions, setExamSessions] = useState([]);
   const [bookingRows, setBookingRows] = useState([]);
 
   const [selDate, setSelDate] = useState("");
@@ -48,8 +49,6 @@ export default function CreateAssessments({ S, showToast }) {
       .then(data => { if (data) setCreds(prev => ({ ...prev, ...data })); })
       .catch(() => {})
       .finally(() => setCredsLoaded(true));
-
-    getSessions().then(data => setExamSessions(data || [])).catch(() => {});
   }, []);
 
   // When a date is selected, load only that date's bookings
@@ -86,8 +85,7 @@ export default function CreateAssessments({ S, showToast }) {
         es.close();
         esRef.current = null;
         showToast(data.message);
-        // Refresh stats after job
-        getSessions().then(d => setExamSessions(d || [])).catch(() => {});
+        refreshData();
         const d = selDateRef.current;
         if (d) getBookingsForDate(d).then(rows => setBookingRows(rows || [])).catch(() => {});
       }

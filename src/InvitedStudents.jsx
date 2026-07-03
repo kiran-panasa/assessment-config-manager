@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { getBookings, getSessions, updateSession, bulkUpdateSessionsFromCsv, bulkSyncFromStudentsCsv } from "./api/firestore";
+import { useState, useMemo, useCallback, useRef } from "react";
+import { updateSession, bulkUpdateSessionsFromCsv, bulkSyncFromStudentsCsv } from "./api/firestore";
+import { useData } from "./DataContext";
 import { parseCSV, downloadCSV, parseSessionSkillLevel } from "./utils/csv";
 import Pagination from "./components/Pagination";
 
@@ -57,10 +58,8 @@ function parseStudentsCsvText(text) {
 }
 
 export default function InvitedStudents({ S, showToast }) {
-  const [activeTab, setActiveTab]     = useState("students");
-  const [bookingRows, setBookingRows] = useState([]);
-  const [examSessions, setExamSessions] = useState([]);
-  const [loading, setLoading]         = useState(true);
+  const { bookingRows, examSessions, setExamSessions, dataLoading, refreshData } = useData();
+  const [activeTab, setActiveTab] = useState("students");
 
   // students tab state
   const [filters, setFilters] = useState(FILTER_INIT);
@@ -81,18 +80,6 @@ export default function InvitedStudents({ S, showToast }) {
   const studentsCsvInputRef                               = useRef(null);
   const [studentsUploadPreview, setStudentsUploadPreview] = useState(null);
   const [studentsUploading, setStudentsUploading]         = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [bookingsData, sessionsData] = await Promise.all([getBookings(), getSessions()]);
-      setBookingRows(bookingsData || []);
-      setExamSessions(sessionsData || []);
-    } catch { /* silent */ }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   const sessionMap = useMemo(() => {
     const m = new Map();
@@ -218,12 +205,12 @@ export default function InvitedStudents({ S, showToast }) {
       const { updated, notFound } = await bulkUpdateSessionsFromCsv(uploadPreview.rows);
       showToast(`${updated} session(s) updated${notFound ? `, ${notFound} Unique Exam ID(s) not found` : ""}.`);
       setUploadPreview(null);
-      await load();
+      await refreshData();
     } catch (err) {
       showToast(err.message || "Upload failed.", "error");
     }
     setUploading(false);
-  }, [uploadPreview, load, showToast]);
+  }, [uploadPreview, refreshData, showToast]);
 
   const handleStudentsCsvFile = useCallback((file) => {
     const reader = new FileReader();
@@ -267,12 +254,12 @@ export default function InvitedStudents({ S, showToast }) {
       const skipped = (result.sessionsNotFound || 0) + (result.studentsNotFound || 0);
       showToast((parts.join(", ") || "Nothing to update") + (skipped ? ` (${skipped} skipped)` : "") + ".");
       setStudentsUploadPreview(null);
-      await load();
+      await refreshData();
     } catch (err) {
       showToast(err.message || "Upload failed.", "error");
     }
     setStudentsUploading(false);
-  }, [studentsUploadPreview, load, showToast]);
+  }, [studentsUploadPreview, refreshData, showToast]);
 
   // ── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -307,7 +294,7 @@ export default function InvitedStudents({ S, showToast }) {
 
   const selStyle = { ...S.select, width: "auto", minWidth: 120 };
 
-  if (loading) return (
+  if (dataLoading) return (
     <div style={{ padding: "80px 48px", color: "#94a3b8", fontFamily: "'Inter', sans-serif", fontSize: 14 }}>Loading…</div>
   );
 

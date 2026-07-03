@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { api } from "./api/client";
 import {
-  getAssessments, getBookings, getSessions,
+  getAssessments,
   bulkSaveBookings, deleteBooking, bulkDeleteBookings,
   updateSession, deleteSession, bulkDeleteSessions,
   createLog,
 } from "./api/firestore";
+import { useData } from "./DataContext";
 import { parseCSVLine, downloadCSV, parseSessionSkillLevel } from "./utils/csv";
 import Pagination from "./components/Pagination";
 
@@ -124,9 +125,9 @@ export default function StudentBookings({ S, showToast }) {
   const [dbFetching, setDbFetching] = useState(false);
   const [dbFetchResult, setDbFetchResult] = useState(null);
 
+  const { bookingRows, examSessions, setBookingRows, setExamSessions, dataLoading, refreshData } = useData();
+
   const [assessments, setAssessments] = useState([]);
-  const [bookingRows, setBookingRows] = useState([]);
-  const [examSessions, setExamSessions] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [t1Filters, setT1Filters] = useState(T1_FILTER_INIT);
@@ -141,15 +142,11 @@ export default function StudentBookings({ S, showToast }) {
 
   const loadData = useCallback(async () => {
     try {
-      const [assessmentsData, bookingsData, sessionsData] = await Promise.all([
-        getAssessments(), getBookings(), getSessions(),
-      ]);
+      const assessmentsData = await getAssessments();
       setAssessments(assessmentsData || []);
-      setBookingRows(bookingsData || []);
-      setExamSessions(sessionsData || []);
     } catch (err) { showToast(err.message, "error"); }
     setLoading(false);
-  }, []);
+  }, [showToast]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -212,7 +209,7 @@ export default function StudentBookings({ S, showToast }) {
       showToast(`Saved: ${rowsToSave.length} bookings, ${csvData.newSessions.length} new sessions.`);
       setCsvData(null); setDupChoice(null); if (fileRef.current) fileRef.current.value="";
       setBookTab("bookings");
-      await loadData();
+      await refreshData();
     } catch (err) { showToast(err.message, "error"); }
     setProcessing(false);
   };
@@ -289,7 +286,7 @@ export default function StudentBookings({ S, showToast }) {
     downloadCSV(t1Filtered.map(r => fields.map(f => r[f])), headers, `bookings${t1Filters.contestDate!=="All"?`-${t1Filters.contestDate}`:""}.csv`);
   };
 
-  if (loading) return <div style={{ padding:"80px 48px",color:"#94a3b8",fontFamily:"'Inter',sans-serif",fontSize:14 }}>Loading…</div>;
+  if (loading || dataLoading) return <div style={{ padding:"80px 48px",color:"#94a3b8",fontFamily:"'Inter',sans-serif",fontSize:14 }}>Loading…</div>;
 
   return (
     <div style={{ animation:"fadeIn 0.2s ease" }}>

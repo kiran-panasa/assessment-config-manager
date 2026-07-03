@@ -1,7 +1,7 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, writeBatch, arrayUnion, arrayRemove,
+  query, where, orderBy, limit, writeBatch, arrayUnion, arrayRemove,
 } from "firebase/firestore";
 
 function cutoffDate() {
@@ -30,7 +30,7 @@ export async function createUserProfile(uid, data) {
 }
 
 export async function getAllUsers() {
-  const snap = await getDocs(collection(db, "users"));
+  const snap = await getDocs(query(collection(db, "users"), limit(500)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
@@ -45,7 +45,7 @@ export async function deleteUser(id) {
 // ── Roles ─────────────────────────────────────────────────────────────────────
 
 export async function getAllRoles() {
-  const snap = await getDocs(collection(db, "roles"));
+  const snap = await getDocs(query(collection(db, "roles"), limit(100)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
@@ -69,7 +69,7 @@ export async function deleteRole(id) {
 // ── Assessments ───────────────────────────────────────────────────────────────
 
 export async function getAssessments() {
-  const snap = await getDocs(collection(db, "assessments"));
+  const snap = await getDocs(query(collection(db, "assessments"), limit(500)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 

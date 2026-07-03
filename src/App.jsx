@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import { signOut } from "firebase/auth";
 import { auth } from "./firebase";
 import { AuthProvider, useAuth } from "./AuthContext";
+import { DataProvider } from "./DataContext";
 
 import { S, css } from "./styles";
 import LoginPage  from "./LoginPage";
@@ -18,9 +19,9 @@ const AboutPage         = lazy(() => import("./AboutPage"));
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Toast({ message, type, onDone }) {
-  useEffect(() => { const t=setTimeout(onDone,2200); return ()=>clearTimeout(t); },[]);
-  return <div style={{ position:"fixed",bottom:32,right:32,zIndex:9999,background:type==="error"?"#ff4444":"#00c896",color:"#fff",padding:"12px 22px",borderRadius:8,fontFamily:"'Inter',sans-serif",fontSize:13,boxShadow:"0 4px 24px rgba(0,0,0,0.18)",animation:"slideUp 0.25s ease" }}>{message}</div>;
+function Toast({ id, message, type, onDone }) {
+  useEffect(() => { const t=setTimeout(()=>onDone(id),2200); return ()=>clearTimeout(t); },[id,onDone]);
+  return <div style={{ background:type==="error"?"#ff4444":"#00c896",color:"#fff",padding:"12px 22px",borderRadius:8,fontFamily:"'Inter',sans-serif",fontSize:13,boxShadow:"0 4px 24px rgba(0,0,0,0.18)",animation:"slideUp 0.25s ease",pointerEvents:"none" }}>{message}</div>;
 }
 
 const IconAssessment = ({ color }) => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>);
@@ -43,8 +44,12 @@ function AppShell() {
   const { currentUser, userProfile, allowedPages, authLoading } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
-  const [toast, setToast] = useState(null);
-  const showToast = useCallback((message, type="success") => setToast({ message, type }), []);
+  const [toasts, setToasts] = useState([]);
+  const showToast   = useCallback((message, type="success") => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts(ts => [...ts, { id, message, type }]);
+  }, []);
+  const dismissToast = useCallback((id) => setToasts(ts => ts.filter(t => t.id !== id)), []);
 
   const prevRoleRef = useRef(null);
   useEffect(() => {
@@ -73,6 +78,7 @@ function AppShell() {
   const currentPage = location.pathname.slice(1) || "assessments";
 
   return (
+    <DataProvider>
     <div style={S.root}>
       <style>{css}</style>
       <aside style={S.sidebar}>
@@ -116,8 +122,13 @@ function AppShell() {
         </Suspense>
       </div>
 
-      {toast && <Toast message={toast.message} type={toast.type} onDone={()=>setToast(null)} />}
+      {toasts.length > 0 && (
+        <div style={{ position:"fixed",bottom:32,right:32,zIndex:9999,display:"flex",flexDirection:"column-reverse",gap:8 }}>
+          {toasts.map(t => <Toast key={t.id} id={t.id} message={t.message} type={t.type} onDone={dismissToast} />)}
+        </div>
+      )}
     </div>
+    </DataProvider>
   );
 }
 
