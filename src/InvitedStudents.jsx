@@ -341,7 +341,7 @@ export default function InvitedStudents({ S, showToast }) {
               )}
             </>
           )}
-          <button onClick={load} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>Refresh</button>
+          <button onClick={refreshData} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>Refresh</button>
         </div>
       </div>
 
