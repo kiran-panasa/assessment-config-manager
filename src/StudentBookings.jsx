@@ -409,7 +409,7 @@ export default function StudentBookings({ S, showToast }) {
               </div>
             </div>
             <div style={S.card}>
-              {t1Filtered.length===0?(<div style={{ textAlign:"center",color:"#555a7a",padding:"60px 0",fontSize:13 }}><div style={{ marginBottom:10,fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,color:"#94a3b8" }}>{!selectedDate?"Select a date above to load data":bookingRows.length===0?"No bookings for this date":"No results for selected filters"}</div></div>):(
+              {t1Filtered.length===0?(<div style={{ textAlign:"center",color:"#555a7a",padding:"60px 0",fontSize:13 }}><div style={{ marginBottom:10,fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,color:"#94a3b8" }}>{bookingRows.length===0?(selectedDate?"No bookings for this date":"No bookings for the last 3 days"):"No results for selected filters"}</div></div>):(
                 <>
                   <div style={{ overflowX:"auto" }}>
                     <table style={S.table}><thead><tr>{T1_COLS.map(([h])=><th key={h} style={S.th}>{h}</th>)}<th style={S.th}></th></tr></thead>
@@ -448,7 +448,7 @@ export default function StudentBookings({ S, showToast }) {
               </div>
             </div>
             <div style={S.card}>
-              {t2Filtered.length===0?(<div style={{ textAlign:"center",color:"#555a7a",padding:"60px 0" }}><div style={{ fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,color:"#94a3b8",marginBottom:10 }}>{!selectedDate?"Select a date above to load data":examSessions.length===0?"No sessions for this date":"No results"}</div></div>):(
+              {t2Filtered.length===0?(<div style={{ textAlign:"center",color:"#555a7a",padding:"60px 0" }}><div style={{ fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,color:"#94a3b8",marginBottom:10 }}>{examSessions.length===0?(selectedDate?"No sessions for this date":"No sessions for the last 3 days"):"No results"}</div></div>):(
                 <>
                   <div style={{ overflowX:"auto" }}>
                     <table style={S.table}><thead><tr>{T2_COLS.map(c=><th key={c} style={S.th}>{c}</th>)}<th style={S.th}></th></tr></thead>

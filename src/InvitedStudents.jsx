@@ -394,7 +394,7 @@ export default function InvitedStudents({ S, showToast }) {
               {filtered.length === 0 ? (
                 <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0", fontSize: 13 }}>
                   <div style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8" }}>
-                    {!selectedDate ? "Select a date above to load data" : rows.length === 0 ? "No data for this date" : "No results for selected filters"}
+                    {rows.length === 0 ? (selectedDate ? "No data for this date" : "No data for the last 3 days") : "No results for selected filters"}
                   </div>
                   {rows.length > 0 && anyActive && <button onClick={resetFilters} style={{ ...S.btn("secondary"), marginTop: 12, fontSize: 12 }}>Clear filters</button>}
                 </div>
@@ -493,7 +493,7 @@ export default function InvitedStudents({ S, showToast }) {
               {t2Filtered.length === 0 ? (
                 <div style={{ textAlign: "center", color: "#555a7a", padding: "60px 0" }}>
                   <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8", marginBottom: 10 }}>
-                    {!selectedDate ? "Select a date above to load data" : examSessions.length === 0 ? "No sessions for this date" : "No results"}
+                    {examSessions.length === 0 ? (selectedDate ? "No sessions for this date" : "No sessions for the last 3 days") : "No results"}
                   </div>
                 </div>
               ) : (
