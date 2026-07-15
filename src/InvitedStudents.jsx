@@ -11,7 +11,7 @@ const COLS = [
   "Contest Date", "Time Slot", "Campus", "Unique Exam ID", "Invite",
   "User Assessment Link", "Config Link", "Details Link",
 ];
-const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
+const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
 
 function deriveUserLink(assessmentLink) {
   if (!assessmentLink) return null;
@@ -133,6 +133,12 @@ export default function InvitedStudents({ S, showToast }) {
     examSessions.forEach(s => { if (s.sessionKey) m.set(s.sessionKey, s); });
     return m;
   }, [examSessions]);
+
+  const sessionStudentCount = useMemo(() => {
+    const m = new Map();
+    bookingRows.forEach(r => { if (r.sessionKey) m.set(r.sessionKey, (m.get(r.sessionKey) || 0) + 1); });
+    return m;
+  }, [bookingRows]);
 
   // ── Students tab ─────────────────────────────────────────────────────────────
 
@@ -579,6 +585,7 @@ export default function InvitedStudents({ S, showToast }) {
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.startTimeSlot}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.endTimeSlot}</td>
                             <td style={{ ...S.td, fontSize: 11, color: "#3b82f6", fontFamily: "'DM Mono', monospace" }}>{s.uniqueExamId}</td>
+                            <td style={{ ...S.td, textAlign: "center", fontWeight: 700, color: "#0f172a" }}>{sessionStudentCount.get(s.sessionKey) ?? 0}</td>
                             <td style={S.td}><span style={{ ...S.badge("#ff9966"), fontFamily: "'DM Mono', monospace", letterSpacing: "0.2em", fontSize: 13 }}>{s.exitPin}</span></td>
                             <td style={{ ...S.td, fontSize: 11, color: "#3b82f6", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap" }}>{s.topinAssessmentId ? s.topinAssessmentId.slice(0, 8) + "…" : "—"}</td>
                             <td style={S.td}>{s.publishStatus === "published" ? <span style={S.badge("#00c896")}>Published</span> : s.publishStatus === "failed" ? <span style={S.badge("#ff5555")}>Failed</span> : <span style={S.badge("#555a7a")}>Pending</span>}</td>

@@ -39,7 +39,7 @@ const T1_COLS = [
   ["Status","status"],["Student UID","studentUid"],["Booked At","bookedAt"],
   ["Contest Link","contestLink"],["Classroom Details","classroomDetails"],
 ];
-const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
+const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
 const T3_COLS = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite"];
 
 function splitCSVRow(line) {
@@ -230,6 +230,7 @@ function StudentBookings({ S, showToast }) {
   const existingDocIdMap = useMemo(() => { const m=new Map(); bookingRows.forEach(r=>m.set(r.bookingId,r.id)); return m; }, [bookingRows]);
   const sessionMap = useMemo(() => { const m=new Map(); examSessions.forEach(s=>{ if(s.sessionKey) m.set(s.sessionKey,s); }); return m; }, [examSessions]);
   const userMapping = useMemo(()=>bookingRows.map(row=>{ const s=row.sessionKey?sessionMap.get(row.sessionKey):null; return {...row,uniqueExamId:s?.uniqueExamId??"—",mapped:!!s}; }),[bookingRows,sessionMap]);
+  const sessionStudentCount = useMemo(()=>{ const m=new Map(); bookingRows.forEach(r=>{ if(r.sessionKey) m.set(r.sessionKey,(m.get(r.sessionKey)||0)+1); }); return m; },[bookingRows]);
 
   const t1Opts = useMemo(()=>({ contestDate:[...new Set(bookingRows.map(r=>r.contestDate))].filter(Boolean).sort(),skill:[...new Set(bookingRows.map(r=>r.skill))].filter(Boolean).sort(),skillLevel:[...new Set(bookingRows.map(r=>r.skillLevel))].filter(Boolean).sort(),timeSlot:[...new Set(bookingRows.map(r=>r.timeSlot))].filter(Boolean).sort(),campus:[...new Set(bookingRows.map(r=>r.campus))].filter(Boolean).sort(),batch:[...new Set(bookingRows.map(r=>r.batch))].filter(Boolean).sort() }),[bookingRows]);
   const t2Opts = useMemo(()=>{ const skills=new Set(),levels=new Set(),times=new Set(),dates=new Set(); examSessions.forEach(s=>{ const{skill,level}=parseSessionSkillLevel(s.assessmentTitle); if(skill)skills.add(skill); if(level)levels.add(level); if(s.startTimeSlot)times.add(s.startTimeSlot); if(s.dateOfAssessment)dates.add(s.dateOfAssessment); }); return{dateOfAssessment:[...dates].sort(),skill:[...skills].sort(),level:[...levels].sort(),startTimeSlot:[...times].sort()}; },[examSessions]);
@@ -501,7 +502,7 @@ function StudentBookings({ S, showToast }) {
                 ))}
                 <div style={{ display:"flex",gap:8,alignItems:"flex-end",marginLeft:"auto" }}>
                   {t2AnyActive&&<button onClick={()=>{ setT2Filters(T2_FILTER_INIT); setT2Page(1); }} style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }}>Reset</button>}
-                  {t2Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>{ const h=["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],esc=v=>`"${String(v??"").replace(/"/g,'""')}"`,rows=[h.map(esc).join(","),...t2Filtered.map(s=>[s.assessmentTitle,s.dateOfAssessment,s.startTimeSlot,s.endTimeSlot,s.uniqueExamId,s.exitPin,s.topinAssessmentId??"",s.publishStatus??"pending",s.viewAssessmentUrl??"",s.assessmentLink??"",s.viewDetailsUrl??""].map(esc).join(","))];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`unique-assessments${t2Filters.dateOfAssessment!=="All"?`-${t2Filters.dateOfAssessment}`:""}.csv`;a.click(); }}>Download CSV</button>}
+                  {t2Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>{ const h=["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],esc=v=>`"${String(v??"").replace(/"/g,'""')}"`,rows=[h.map(esc).join(","),...t2Filtered.map(s=>[s.assessmentTitle,s.dateOfAssessment,s.startTimeSlot,s.endTimeSlot,s.uniqueExamId,sessionStudentCount.get(s.sessionKey)??0,s.exitPin,s.topinAssessmentId??"",s.publishStatus??"pending",s.viewAssessmentUrl??"",s.assessmentLink??"",s.viewDetailsUrl??""].map(esc).join(","))];const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`unique-assessments${t2Filters.dateOfAssessment!=="All"?`-${t2Filters.dateOfAssessment}`:""}.csv`;a.click(); }}>Download CSV</button>}
                   <button disabled={!t2AnyActive} onClick={()=>openDeleteModal("sessions")} style={{ ...S.btn("danger"),padding:"7px 16px",fontSize:12,opacity:!t2AnyActive?0.35:1 }}>Delete {t2AnyActive?`${t2Filtered.filter(s=>s.publishStatus!=="published").length} records`:"…"}</button>
                 </div>
               </div>
@@ -518,6 +519,7 @@ function StudentBookings({ S, showToast }) {
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.startTimeSlot}</td>
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.endTimeSlot}</td>
                         <td style={{ ...S.td,fontSize:11,color:"#3b82f6",fontFamily:"'DM Mono',monospace" }}>{s.uniqueExamId}</td>
+                        <td style={{ ...S.td,textAlign:"center",fontWeight:700,color:"#0f172a" }}>{sessionStudentCount.get(s.sessionKey)??0}</td>
                         <td style={S.td}><span style={{ ...S.badge("#ff9966"),fontFamily:"'DM Mono',monospace",letterSpacing:"0.2em",fontSize:13 }}>{s.exitPin}</span></td>
                         <td style={{ ...S.td,fontSize:11,color:"#3b82f6",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap" }}>{s.topinAssessmentId?s.topinAssessmentId.slice(0,8)+"…":"—"}</td>
                         <td style={S.td}>{s.publishStatus==="published"?<span style={S.badge("#00c896")}>Published</span>:s.publishStatus==="failed"?<span style={S.badge("#ff5555")}>Failed</span>:<span style={S.badge("#555a7a")}>Pending</span>}</td>
