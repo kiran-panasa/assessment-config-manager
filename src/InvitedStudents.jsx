@@ -6,8 +6,8 @@ import Pagination from "./components/Pagination";
 
 const PAGE_SIZE = 20;
 
-const FILTER_INIT = { contestDate: "All", skill: "All", level: "All", timeSlot: "All", campus: "All", inviteStatus: "All" };
-const T2_FILTER_INIT = { dateOfAssessment: "All", skill: "All", level: "All", startTimeSlot: "All", publishStatus: "All" };
+const FILTER_INIT = { skill: "All", level: "All", timeSlot: "All", campus: "All", inviteStatus: "All" };
+const T2_FILTER_INIT = { skill: "All", level: "All", startTimeSlot: "All", publishStatus: "All" };
 
 const COLS = [
   "Student Name", "NIAT ID", "Student UID", "Skill", "Level",
@@ -58,7 +58,7 @@ function parseStudentsCsvText(text) {
 }
 
 export default function InvitedStudents({ S, showToast }) {
-  const { bookingRows, examSessions, setExamSessions, dataLoading, refreshData } = useData();
+  const { bookingRows, examSessions, setExamSessions, dataLoading, refreshData, selectedDate, loadForDate } = useData();
   const [activeTab, setActiveTab] = useState("students");
 
   // students tab state
@@ -109,7 +109,6 @@ export default function InvitedStudents({ S, showToast }) {
     }), [bookingRows, sessionMap]);
 
   const opts = useMemo(() => ({
-    contestDate:  ["All", ...[...new Set(rows.map(r => r.contestDate))].filter(Boolean).sort()],
     skill:        ["All", ...[...new Set(rows.map(r => r.skill))].filter(Boolean).sort()],
     level:        ["All", ...[...new Set(rows.map(r => r.skillLevel))].filter(Boolean).sort()],
     timeSlot:     ["All", ...[...new Set(rows.map(r => r.timeSlot))].filter(Boolean).sort()],
@@ -120,7 +119,6 @@ export default function InvitedStudents({ S, showToast }) {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter(r => {
-      if (filters.contestDate  !== "All" && r.contestDate !== filters.contestDate) return false;
       if (filters.skill        !== "All" && r.skill       !== filters.skill)       return false;
       if (filters.level        !== "All" && r.skillLevel  !== filters.level)       return false;
       if (filters.timeSlot     !== "All" && r.timeSlot    !== filters.timeSlot)    return false;
@@ -142,24 +140,28 @@ export default function InvitedStudents({ S, showToast }) {
   const resetFilters = () => { setFilters(FILTER_INIT); setSearch(""); setPg(1); };
   const anyActive = Object.values(filters).some(v => v !== "All") || search.trim() !== "";
 
+  const handleDateChange = useCallback((date) => {
+    loadForDate(date);
+    setFilters(FILTER_INIT); setT2Filters(T2_FILTER_INIT);
+    setSearch(""); setPg(1); setT2Page(1);
+  }, [loadForDate]);
+
   // ── Assessments tab ──────────────────────────────────────────────────────────
 
   const t2Opts = useMemo(() => {
-    const skills = new Set(), levels = new Set(), times = new Set(), dates = new Set();
+    const skills = new Set(), levels = new Set(), times = new Set();
     examSessions.forEach(s => {
       const { skill, level } = parseSessionSkillLevel(s.assessmentTitle);
       if (skill) skills.add(skill); if (level) levels.add(level);
       if (s.startTimeSlot) times.add(s.startTimeSlot);
-      if (s.dateOfAssessment) dates.add(s.dateOfAssessment);
     });
-    return { dateOfAssessment: [...dates].sort(), skill: [...skills].sort(), level: [...levels].sort(), startTimeSlot: [...times].sort() };
+    return { skill: [...skills].sort(), level: [...levels].sort(), startTimeSlot: [...times].sort() };
   }, [examSessions]);
 
   const t2Filtered = useMemo(() =>
     examSessions.filter(s => {
       const f = t2Filters;
       const { skill, level } = parseSessionSkillLevel(s.assessmentTitle);
-      if (f.dateOfAssessment !== "All" && s.dateOfAssessment !== f.dateOfAssessment) return false;
       if (f.skill            !== "All" && skill              !== f.skill)             return false;
       if (f.level            !== "All" && level              !== f.level)             return false;
       if (f.startTimeSlot    !== "All" && s.startTimeSlot    !== f.startTimeSlot)     return false;
@@ -282,7 +284,7 @@ export default function InvitedStudents({ S, showToast }) {
         r.userAssessmentLink ?? "", r.viewAssessmentUrl ?? "", r.viewDetailsUrl ?? "",
       ]),
       ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite Status","User Assessment Link","Config Link","Details Link"],
-      `invited-students${filters.contestDate !== "All" ? `-${filters.contestDate}` : ""}.csv`
+      `invited-students${selectedDate ? `-${selectedDate}` : ""}.csv`
     );
   };
 
@@ -294,7 +296,7 @@ export default function InvitedStudents({ S, showToast }) {
         s.viewAssessmentUrl ?? "", s.assessmentLink ?? "", s.viewDetailsUrl ?? "",
       ]),
       ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],
-      `unique-assessments${t2Filters.dateOfAssessment !== "All" ? `-${t2Filters.dateOfAssessment}` : ""}.csv`
+      `unique-assessments${selectedDate ? `-${selectedDate}` : ""}.csv`
     );
   };
 
@@ -347,7 +349,8 @@ export default function InvitedStudents({ S, showToast }) {
               )}
             </>
           )}
-          <button onClick={refreshData} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>Refresh</button>
+          <input type="date" style={{ ...S.input,width:160,padding:"5px 10px",fontSize:12 }} value={selectedDate} onChange={e=>handleDateChange(e.target.value)} />
+          {selectedDate&&<button onClick={refreshData} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>Refresh</button>}
         </div>
       </div>
 
@@ -374,7 +377,7 @@ export default function InvitedStudents({ S, showToast }) {
                 <input type="text" placeholder="Search name, NIAT ID, UID, Exam ID…" value={search}
                   onChange={e => { setSearch(e.target.value); setPg(1); }}
                   style={{ ...S.input, margin: 0, width: 260, fontSize: 12 }} />
-                {[["contestDate","Date"],["skill","Skill"],["level","Level"],["timeSlot","Time Slot"],["campus","Campus"],["inviteStatus","Invite"]].map(([key,label]) => (
+                {[["skill","Skill"],["level","Level"],["timeSlot","Time Slot"],["campus","Campus"],["inviteStatus","Invite"]].map(([key,label]) => (
                   <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Inter', sans-serif", fontWeight: 600, whiteSpace: "nowrap" }}>{label}</span>
                     <select style={{ ...selStyle, borderColor: filters[key] !== "All" ? "#00c896" : undefined }}
@@ -391,9 +394,8 @@ export default function InvitedStudents({ S, showToast }) {
               {filtered.length === 0 ? (
                 <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0", fontSize: 13 }}>
                   <div style={{ marginBottom: 10, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8" }}>
-                    {rows.length === 0 ? "No data yet" : "No results for selected filters"}
+                    {!selectedDate ? "Select a date above to load data" : rows.length === 0 ? "No data for this date" : "No results for selected filters"}
                   </div>
-                  {rows.length === 0 && "Upload a CSV and publish assessments to populate this table."}
                   {rows.length > 0 && anyActive && <button onClick={resetFilters} style={{ ...S.btn("secondary"), marginTop: 12, fontSize: 12 }}>Clear filters</button>}
                 </div>
               ) : (
@@ -469,7 +471,6 @@ export default function InvitedStudents({ S, showToast }) {
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                 {[
-                  { key: "dateOfAssessment", label: "Date",    opts: t2Opts.dateOfAssessment },
                   { key: "skill",            label: "Skill",   opts: t2Opts.skill },
                   { key: "level",            label: "Level",   opts: t2Opts.level },
                   { key: "startTimeSlot",    label: "Time",    opts: t2Opts.startTimeSlot },
@@ -492,7 +493,7 @@ export default function InvitedStudents({ S, showToast }) {
               {t2Filtered.length === 0 ? (
                 <div style={{ textAlign: "center", color: "#555a7a", padding: "60px 0" }}>
                   <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: "#94a3b8", marginBottom: 10 }}>
-                    {examSessions.length === 0 ? "No sessions yet" : "No results"}
+                    {!selectedDate ? "Select a date above to load data" : examSessions.length === 0 ? "No sessions for this date" : "No results"}
                   </div>
                 </div>
               ) : (

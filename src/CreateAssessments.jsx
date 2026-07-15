@@ -19,7 +19,7 @@ const LOG_COLOR = {
 export default function CreateAssessments({ S, showToast }) {
   const { allowedPages } = useAuth();
   const canViewCredentials = allowedPages.includes("credentials");
-  const { examSessions, setExamSessions, refreshData } = useData();
+  const { examSessions, setExamSessions, refreshData, loadForDate } = useData();
   const [tab, setTab] = useState("run");
   const [serverOnline, setServerOnline] = useState(null);
 
@@ -51,11 +51,12 @@ export default function CreateAssessments({ S, showToast }) {
       .finally(() => setCredsLoaded(true));
   }, []);
 
-  // When a date is selected, load only that date's bookings
+  // When a date is selected, load that date's bookings locally and sync context
   useEffect(() => {
     if (!selDate) { setBookingRows([]); return; }
     getBookingsForDate(selDate).then(data => setBookingRows(data || [])).catch(() => {});
-  }, [selDate]);
+    loadForDate(selDate);
+  }, [selDate, loadForDate]);
 
   // Redirect away from credentials tab if permission is revoked mid-session
   useEffect(() => {

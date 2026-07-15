@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
-import { db } from "./firebase";
+import { createContext, useContext, useState, useCallback, useMemo } from "react";
+import { getBookingsForDate, getAllSessionsForDate } from "./api/firestore";
 
 const DataContext = createContext(null);
 
@@ -8,56 +7,49 @@ export function useData() {
   return useContext(DataContext);
 }
 
-// 30-day window for the UI — enough for active work, 3× fewer reads than 90 days
-function uiCutoffDate() {
-  return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
 export function DataProvider({ children }) {
-  const [bookingRows,  setBookingRows]  = useState(null);
-  const [examSessions, setExamSessions] = useState(null);
+  const [bookingRows,  setBookingRows]  = useState([]);
+  const [examSessions, setExamSessions] = useState([]);
+  const [selectedDate, setSelectedDate] = useState("");
+  const [dataLoading,  setDataLoading]  = useState(false);
 
-  // Live listener for bookingRows — eliminates repeated getBookings() fetches on refreshData
-  useEffect(() => {
-    const q = query(
-      collection(db, "bookingRows"),
-      where("contestDate", ">=", uiCutoffDate()),
-      orderBy("contestDate", "asc")
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => setBookingRows(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
-      ()     => setBookingRows([])
-    );
-    return unsub;
+  // Fetch data only for the requested date — zero reads when no date is selected
+  const loadForDate = useCallback(async (date) => {
+    if (!date) {
+      setBookingRows([]);
+      setExamSessions([]);
+      setSelectedDate("");
+      return;
+    }
+    setDataLoading(true);
+    try {
+      const [bookings, sessions] = await Promise.all([
+        getBookingsForDate(date),
+        getAllSessionsForDate(date),
+      ]);
+      setBookingRows(bookings || []);
+      setExamSessions(sessions || []);
+      setSelectedDate(date);
+    } catch { /* silent */ }
+    setDataLoading(false);
   }, []);
 
-  // Live listener for examSessions — auto-reflects any write from any component
-  useEffect(() => {
-    const q = query(
-      collection(db, "examSessions"),
-      where("dateOfAssessment", ">=", uiCutoffDate()),
-      orderBy("dateOfAssessment", "asc")
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => setExamSessions(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
-      ()     => setExamSessions([])
-    );
-    return unsub;
-  }, []);
-
-  // No-op: both collections are kept live by onSnapshot — no re-fetch needed
-  const refreshData = useCallback(() => Promise.resolve(), []);
+  // Re-fetch the currently selected date (used after writes)
+  const refreshData = useCallback(() => {
+    if (selectedDate) return loadForDate(selectedDate);
+    return Promise.resolve();
+  }, [selectedDate, loadForDate]);
 
   const value = useMemo(() => ({
-    bookingRows:  bookingRows  ?? [],
-    examSessions: examSessions ?? [],
-    dataLoading:  bookingRows === null || examSessions === null,
+    bookingRows,
+    examSessions,
+    selectedDate,
+    dataLoading,
     setBookingRows,
     setExamSessions,
+    loadForDate,
     refreshData,
-  }), [bookingRows, examSessions, refreshData]);
+  }), [bookingRows, examSessions, selectedDate, dataLoading, loadForDate, refreshData]);
 
   return (
     <DataContext.Provider value={value}>

@@ -26,8 +26,8 @@ const T1_COLS = [
 const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
 const T3_COLS = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite"];
 
-const T1_FILTER_INIT = { contestDate:"All",skill:"All",skillLevel:"All",timeSlot:"All",campus:"All",batch:"All",inviteStatus:"All" };
-const T2_FILTER_INIT = { dateOfAssessment:"All",skill:"All",level:"All",startTimeSlot:"All",publishStatus:"All" };
+const T1_FILTER_INIT = { skill:"All",skillLevel:"All",timeSlot:"All",campus:"All",batch:"All",inviteStatus:"All" };
+const T2_FILTER_INIT = { skill:"All",level:"All",startTimeSlot:"All",publishStatus:"All" };
 
 // ── Booking helpers ───────────────────────────────────────────────────────────
 
@@ -125,7 +125,7 @@ export default function StudentBookings({ S, showToast }) {
   const [dbFetching, setDbFetching] = useState(false);
   const [dbFetchResult, setDbFetchResult] = useState(null);
 
-  const { bookingRows, examSessions, setBookingRows, setExamSessions, dataLoading, refreshData } = useData();
+  const { bookingRows, examSessions, setBookingRows, setExamSessions, dataLoading, refreshData, selectedDate, loadForDate } = useData();
 
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -150,17 +150,23 @@ export default function StudentBookings({ S, showToast }) {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const handleDateChange = useCallback((date) => {
+    loadForDate(date);
+    setT1Filters(T1_FILTER_INIT); setT2Filters(T2_FILTER_INIT);
+    setT1Page(1); setT2Page(1); setT3Page(1);
+  }, [loadForDate]);
+
   const existingBids = useMemo(() => bookingRows.map(r=>r.bookingId), [bookingRows]);
   const existingDocIdMap = useMemo(() => { const m=new Map(); bookingRows.forEach(r=>m.set(r.bookingId,r.id)); return m; }, [bookingRows]);
   const sessionMap = useMemo(() => { const m=new Map(); examSessions.forEach(s=>{ if(s.sessionKey) m.set(s.sessionKey,s); }); return m; }, [examSessions]);
   const userMapping = useMemo(()=>bookingRows.map(row=>{ const s=row.sessionKey?sessionMap.get(row.sessionKey):null; return {...row,uniqueExamId:s?.uniqueExamId??"—",mapped:!!s}; }),[bookingRows,sessionMap]);
   const sessionStudentCount = useMemo(()=>{ const m=new Map(); bookingRows.forEach(r=>{ if(r.sessionKey) m.set(r.sessionKey,(m.get(r.sessionKey)||0)+1); }); return m; },[bookingRows]);
 
-  const t1Opts = useMemo(()=>({ contestDate:[...new Set(bookingRows.map(r=>r.contestDate))].filter(Boolean).sort(),skill:[...new Set(bookingRows.map(r=>r.skill))].filter(Boolean).sort(),skillLevel:[...new Set(bookingRows.map(r=>r.skillLevel))].filter(Boolean).sort(),timeSlot:[...new Set(bookingRows.map(r=>r.timeSlot))].filter(Boolean).sort(),campus:[...new Set(bookingRows.map(r=>r.campus))].filter(Boolean).sort(),batch:[...new Set(bookingRows.map(r=>r.batch))].filter(Boolean).sort() }),[bookingRows]);
-  const t2Opts = useMemo(()=>{ const skills=new Set(),levels=new Set(),times=new Set(),dates=new Set(); examSessions.forEach(s=>{ const{skill,level}=parseSessionSkillLevel(s.assessmentTitle); if(skill)skills.add(skill); if(level)levels.add(level); if(s.startTimeSlot)times.add(s.startTimeSlot); if(s.dateOfAssessment)dates.add(s.dateOfAssessment); }); return{dateOfAssessment:[...dates].sort(),skill:[...skills].sort(),level:[...levels].sort(),startTimeSlot:[...times].sort()}; },[examSessions]);
+  const t1Opts = useMemo(()=>({ skill:[...new Set(bookingRows.map(r=>r.skill))].filter(Boolean).sort(),skillLevel:[...new Set(bookingRows.map(r=>r.skillLevel))].filter(Boolean).sort(),timeSlot:[...new Set(bookingRows.map(r=>r.timeSlot))].filter(Boolean).sort(),campus:[...new Set(bookingRows.map(r=>r.campus))].filter(Boolean).sort(),batch:[...new Set(bookingRows.map(r=>r.batch))].filter(Boolean).sort() }),[bookingRows]);
+  const t2Opts = useMemo(()=>{ const skills=new Set(),levels=new Set(),times=new Set(); examSessions.forEach(s=>{ const{skill,level}=parseSessionSkillLevel(s.assessmentTitle); if(skill)skills.add(skill); if(level)levels.add(level); if(s.startTimeSlot)times.add(s.startTimeSlot); }); return{skill:[...skills].sort(),level:[...levels].sort(),startTimeSlot:[...times].sort()}; },[examSessions]);
 
-  const t1Filtered = useMemo(()=>bookingRows.filter(r=>{ const f=t1Filters; if(f.contestDate!=="All"&&r.contestDate!==f.contestDate)return false; if(f.skill!=="All"&&r.skill!==f.skill)return false; if(f.skillLevel!=="All"&&r.skillLevel!==f.skillLevel)return false; if(f.timeSlot!=="All"&&r.timeSlot!==f.timeSlot)return false; if(f.campus!=="All"&&r.campus!==f.campus)return false; if(f.batch!=="All"&&r.batch!==f.batch)return false; if(f.inviteStatus!=="All"){ const st=r.inviteStatus||"not_sent"; if(st!==f.inviteStatus)return false; } return true; }),[bookingRows,t1Filters]);
-  const t2Filtered = useMemo(()=>examSessions.filter(s=>{ const f=t2Filters; const{skill,level}=parseSessionSkillLevel(s.assessmentTitle); if(f.dateOfAssessment!=="All"&&s.dateOfAssessment!==f.dateOfAssessment)return false; if(f.skill!=="All"&&skill!==f.skill)return false; if(f.level!=="All"&&level!==f.level)return false; if(f.startTimeSlot!=="All"&&s.startTimeSlot!==f.startTimeSlot)return false; if(f.publishStatus!=="All"){ const st=s.publishStatus||"pending"; if(st!==f.publishStatus)return false; } return true; }),[examSessions,t2Filters]);
+  const t1Filtered = useMemo(()=>bookingRows.filter(r=>{ const f=t1Filters; if(f.skill!=="All"&&r.skill!==f.skill)return false; if(f.skillLevel!=="All"&&r.skillLevel!==f.skillLevel)return false; if(f.timeSlot!=="All"&&r.timeSlot!==f.timeSlot)return false; if(f.campus!=="All"&&r.campus!==f.campus)return false; if(f.batch!=="All"&&r.batch!==f.batch)return false; if(f.inviteStatus!=="All"){ const st=r.inviteStatus||"not_sent"; if(st!==f.inviteStatus)return false; } return true; }),[bookingRows,t1Filters]);
+  const t2Filtered = useMemo(()=>examSessions.filter(s=>{ const f=t2Filters; const{skill,level}=parseSessionSkillLevel(s.assessmentTitle); if(f.skill!=="All"&&skill!==f.skill)return false; if(f.level!=="All"&&level!==f.level)return false; if(f.startTimeSlot!=="All"&&s.startTimeSlot!==f.startTimeSlot)return false; if(f.publishStatus!=="All"){ const st=s.publishStatus||"pending"; if(st!==f.publishStatus)return false; } return true; }),[examSessions,t2Filters]);
   const t3Dates = useMemo(()=>[...new Set(userMapping.map(r=>r.contestDate))].filter(Boolean).sort(),[userMapping]);
   const t3Filtered = t3Date==="All"?userMapping:userMapping.filter(r=>r.contestDate===t3Date);
   const t1AnyActive = Object.values(t1Filters).some(v=>v!=="All");
@@ -284,7 +290,7 @@ export default function StudentBookings({ S, showToast }) {
   const downloadBookingsCSV = () => {
     const headers = ["Booking ID","Student UID","Student Name","NIAT ID","Campus","Slot Centre","Batch","Section","Contest Date","Time Slot","Skill","Skill Level","Contest Link","Classroom Details","Booked At","Attendance","Status"];
     const fields  = ["bookingId","studentUid","studentName","niatId","campus","slotCentre","batch","section","contestDate","timeSlot","skill","skillLevel","contestLink","classroomDetails","bookedAt","attendance","status"];
-    downloadCSV(t1Filtered.map(r => fields.map(f => r[f])), headers, `bookings${t1Filters.contestDate!=="All"?`-${t1Filters.contestDate}`:""}.csv`);
+    downloadCSV(t1Filtered.map(r => fields.map(f => r[f])), headers, `bookings${selectedDate?`-${selectedDate}`:""}.csv`);
   };
 
   if (loading || dataLoading) return <div style={{ padding:"80px 48px",color:"#94a3b8",fontFamily:"'Inter',sans-serif",fontSize:14 }}>Loading…</div>;
@@ -298,9 +304,10 @@ export default function StudentBookings({ S, showToast }) {
             <button key={key} style={S.navItem(bookTab===key)} onClick={()=>setBookTab(key)}>{label}</button>
           ))}
         </nav>
-        <div style={{ marginLeft:"auto",paddingBottom:18,paddingTop:18,fontSize:12,color:"#94a3b8" }}>
-          {bookingRows.length} bookings · {examSessions.length} sessions
-          <button onClick={loadData} style={{ marginLeft:12,...S.btn("secondary"),padding:"4px 10px",fontSize:11 }}>Refresh</button>
+        <div style={{ marginLeft:"auto",paddingBottom:18,paddingTop:18,display:"flex",alignItems:"center",gap:12 }}>
+          <input type="date" style={{ ...S.input,width:160,padding:"5px 10px",fontSize:12 }} value={selectedDate} onChange={e=>handleDateChange(e.target.value)} />
+          {selectedDate&&<span style={{ fontSize:12,color:"#94a3b8" }}>{bookingRows.length} bookings · {examSessions.length} sessions</span>}
+          {selectedDate&&<button onClick={refreshData} style={{ ...S.btn("secondary"),padding:"4px 10px",fontSize:11 }}>Refresh</button>}
         </div>
       </div>
 
@@ -388,7 +395,7 @@ export default function StudentBookings({ S, showToast }) {
                 <div><div style={S.sectionTitle}>Slot Bookings</div><div style={{ ...S.sectionSub,marginBottom:0 }}>All raw booking rows.</div></div>
               </div>
               <div style={{ display:"flex",flexWrap:"wrap",gap:10,alignItems:"flex-end" }}>
-                {[{key:"contestDate",label:"Date",opts:t1Opts.contestDate},{key:"skill",label:"Skill",opts:t1Opts.skill},{key:"skillLevel",label:"Level",opts:t1Opts.skillLevel},{key:"timeSlot",label:"Time Slot",opts:t1Opts.timeSlot},{key:"campus",label:"Campus",opts:t1Opts.campus},{key:"batch",label:"Batch",opts:t1Opts.batch},{key:"inviteStatus",label:"Invite",opts:["sent","failed","not_sent"],display:{sent:"Sent",failed:"Failed",not_sent:"Not Sent"}}].map(({key,label,opts,display})=>(
+                {[{key:"skill",label:"Skill",opts:t1Opts.skill},{key:"skillLevel",label:"Level",opts:t1Opts.skillLevel},{key:"timeSlot",label:"Time Slot",opts:t1Opts.timeSlot},{key:"campus",label:"Campus",opts:t1Opts.campus},{key:"batch",label:"Batch",opts:t1Opts.batch},{key:"inviteStatus",label:"Invite",opts:["sent","failed","not_sent"],display:{sent:"Sent",failed:"Failed",not_sent:"Not Sent"}}].map(({key,label,opts,display})=>(
                   <div key={key}><div style={{ ...S.label,marginBottom:4 }}>{label}</div>
                   <select style={{ ...S.select,width:"auto",minWidth:110,padding:"7px 10px",fontSize:12 }} value={t1Filters[key]} onChange={e=>{ setT1Filters(f=>({...f,[key]:e.target.value})); setT1Page(1); }}>
                     <option value="All">All</option>{opts.map(v=><option key={v} value={v}>{display?display[v]:v}</option>)}
@@ -402,7 +409,7 @@ export default function StudentBookings({ S, showToast }) {
               </div>
             </div>
             <div style={S.card}>
-              {t1Filtered.length===0?(<div style={{ textAlign:"center",color:"#555a7a",padding:"60px 0",fontSize:13 }}><div style={{ marginBottom:10,fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,color:"#94a3b8" }}>{bookingRows.length===0?"No bookings yet":"No results for selected filters"}</div>{bookingRows.length===0&&"Upload a CSV to populate this table."}</div>):(
+              {t1Filtered.length===0?(<div style={{ textAlign:"center",color:"#555a7a",padding:"60px 0",fontSize:13 }}><div style={{ marginBottom:10,fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,color:"#94a3b8" }}>{!selectedDate?"Select a date above to load data":bookingRows.length===0?"No bookings for this date":"No results for selected filters"}</div></div>):(
                 <>
                   <div style={{ overflowX:"auto" }}>
                     <table style={S.table}><thead><tr>{T1_COLS.map(([h])=><th key={h} style={S.th}>{h}</th>)}<th style={S.th}></th></tr></thead>
@@ -427,7 +434,7 @@ export default function StudentBookings({ S, showToast }) {
                 <div><div style={S.sectionTitle}>Unique Assessments</div><div style={{ ...S.sectionSub,marginBottom:0 }}>One row per unique exam slot.</div></div>
               </div>
               <div style={{ display:"flex",flexWrap:"wrap",gap:10,alignItems:"flex-end" }}>
-                {[{key:"dateOfAssessment",label:"Date",opts:t2Opts.dateOfAssessment},{key:"skill",label:"Skill",opts:t2Opts.skill},{key:"level",label:"Level",opts:t2Opts.level},{key:"startTimeSlot",label:"Time Slot",opts:t2Opts.startTimeSlot},{key:"publishStatus",label:"Status",opts:["pending","published","failed"],display:{pending:"Pending",published:"Published",failed:"Failed"}}].map(({key,label,opts,display})=>(
+                {[{key:"skill",label:"Skill",opts:t2Opts.skill},{key:"level",label:"Level",opts:t2Opts.level},{key:"startTimeSlot",label:"Time Slot",opts:t2Opts.startTimeSlot},{key:"publishStatus",label:"Status",opts:["pending","published","failed"],display:{pending:"Pending",published:"Published",failed:"Failed"}}].map(({key,label,opts,display})=>(
                   <div key={key}><div style={{ ...S.label,marginBottom:4 }}>{label}</div>
                   <select style={{ ...S.select,width:"auto",minWidth:110,padding:"7px 10px",fontSize:12 }} value={t2Filters[key]} onChange={e=>{ setT2Filters(f=>({...f,[key]:e.target.value})); setT2Page(1); }}>
                     <option value="All">All</option>{opts.map(v=><option key={v} value={v}>{display?display[v]:v}</option>)}
@@ -435,13 +442,13 @@ export default function StudentBookings({ S, showToast }) {
                 ))}
                 <div style={{ display:"flex",gap:8,alignItems:"flex-end",marginLeft:"auto" }}>
                   {t2AnyActive&&<button onClick={()=>{ setT2Filters(T2_FILTER_INIT); setT2Page(1); }} style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }}>Reset</button>}
-                  {t2Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>downloadCSV(t2Filtered.map(s=>[s.assessmentTitle,s.dateOfAssessment,s.startTimeSlot,s.endTimeSlot,s.uniqueExamId,sessionStudentCount.get(s.sessionKey)??0,s.exitPin,s.topinAssessmentId??"",s.publishStatus??"pending",s.viewAssessmentUrl??"",s.assessmentLink??"",s.viewDetailsUrl??""]),["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],`unique-assessments${t2Filters.dateOfAssessment!=="All"?`-${t2Filters.dateOfAssessment}`:""}.csv`)}>Download CSV</button>}
+                  {t2Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>downloadCSV(t2Filtered.map(s=>[s.assessmentTitle,s.dateOfAssessment,s.startTimeSlot,s.endTimeSlot,s.uniqueExamId,sessionStudentCount.get(s.sessionKey)??0,s.exitPin,s.topinAssessmentId??"",s.publishStatus??"pending",s.viewAssessmentUrl??"",s.assessmentLink??"",s.viewDetailsUrl??""]),["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],`unique-assessments${selectedDate?`-${selectedDate}`:""}.csv`)}>Download CSV</button>}
                   <button disabled={!t2AnyActive} onClick={()=>openDeleteModal("sessions")} style={{ ...S.btn("danger"),padding:"7px 16px",fontSize:12,opacity:!t2AnyActive?0.35:1 }}>Delete {t2AnyActive?`${t2Filtered.filter(s=>s.publishStatus!=="published").length} records`:"…"}</button>
                 </div>
               </div>
             </div>
             <div style={S.card}>
-              {t2Filtered.length===0?(<div style={{ textAlign:"center",color:"#555a7a",padding:"60px 0" }}><div style={{ fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,color:"#94a3b8",marginBottom:10 }}>{examSessions.length===0?"No sessions yet":"No results"}</div></div>):(
+              {t2Filtered.length===0?(<div style={{ textAlign:"center",color:"#555a7a",padding:"60px 0" }}><div style={{ fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,color:"#94a3b8",marginBottom:10 }}>{!selectedDate?"Select a date above to load data":examSessions.length===0?"No sessions for this date":"No results"}</div></div>):(
                 <>
                   <div style={{ overflowX:"auto" }}>
                     <table style={S.table}><thead><tr>{T2_COLS.map(c=><th key={c} style={S.th}>{c}</th>)}<th style={S.th}></th></tr></thead>
