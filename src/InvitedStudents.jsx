@@ -1,5 +1,8 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { getBookings, getSessions, updateSession, bulkUpdateSessionsFromCsv, bulkSyncFromStudentsCsv } from "./api/firestore";
+import { useState, useMemo, useCallback, useRef } from "react";
+import { updateSession, bulkUpdateSessionsFromCsv, bulkSyncFromStudentsCsv } from "./api/firestore";
+import { useData } from "./DataContext";
+import { parseCSV, downloadCSV, parseSessionSkillLevel } from "./utils/csv";
+import Pagination from "./components/Pagination";
 
 const PAGE_SIZE = 20;
 
@@ -24,77 +27,39 @@ function deriveUserLink(assessmentLink) {
   }
 }
 
-function parseLine(line) {
-  const cells = []; let cur = "", inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQ) {
-      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-      else if (ch === '"') inQ = false;
-      else cur += ch;
-    } else {
-      if (ch === '"') inQ = true;
-      else if (ch === ',') { cells.push(cur.trim()); cur = ""; }
-      else cur += ch;
-    }
-  }
-  cells.push(cur.trim());
-  return cells;
-}
-
 function parseCsvText(text) {
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split("\n");
-  if (lines.length < 2) return [];
-  const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, " ").trim());
-  const col = (...keys) => keys.map(k => headers.indexOf(k)).find(i => i !== -1) ?? -1;
-  return lines.slice(1).filter(l => l.trim()).map(line => {
-    const c = parseLine(line);
-    const g = (idx) => (idx !== -1 ? (c[idx] ?? "").trim() : "");
-    return {
-      uniqueExamId:      g(col("unique exam id")),
-      topinAssessmentId: g(col("topin id")),
-      assessmentLink:    g(col("user assessment link")),
-      viewAssessmentUrl: g(col("config link")),
-      viewDetailsUrl:    g(col("details link")),
-      assessmentTitle:   g(col("assessment title")),
-      dateOfAssessment:  g(col("date")),
-    };
-  }).filter(r => r.uniqueExamId);
+  const { rows } = parseCSV(text);
+  return rows.map(row => ({
+    uniqueExamId:      row.get("unique exam id"),
+    topinAssessmentId: row.get("topin id"),
+    assessmentLink:    row.get("user assessment link"),
+    viewAssessmentUrl: row.get("config link"),
+    viewDetailsUrl:    row.get("details link"),
+    assessmentTitle:   row.get("assessment title"),
+    dateOfAssessment:  row.get("date"),
+  })).filter(r => r.uniqueExamId);
 }
 
 function parseStudentsCsvText(text) {
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split("\n");
-  if (lines.length < 2) return [];
-  const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, " ").trim());
-  const col = (...keys) => keys.map(k => headers.indexOf(k)).find(i => i !== -1) ?? -1;
-  return lines.slice(1).filter(l => l.trim()).map(line => {
-    const c = parseLine(line);
-    const g = (idx) => (idx !== -1 ? (c[idx] ?? "").trim() : "");
-    const rawInvite = g(col("invite", "invite status")).toLowerCase();
+  const { rows } = parseCSV(text);
+  return rows.map(row => {
+    const rawInvite = row.get("invite", "invite status").toLowerCase();
     return {
-      studentName:        g(col("student name")),
-      niatId:             g(col("niat id")),
-      studentUid:         g(col("student uid")),
-      uniqueExamId:       g(col("unique exam id")),
+      studentName:        row.get("student name"),
+      niatId:             row.get("niat id"),
+      studentUid:         row.get("student uid"),
+      uniqueExamId:       row.get("unique exam id"),
       inviteStatus:       rawInvite === "sent" ? "sent" : rawInvite === "failed" ? "failed" : "not sent",
-      userAssessmentLink: g(col("user assessment link")),
-      configLink:         g(col("config link")),
-      detailsLink:        g(col("details link")),
+      userAssessmentLink: row.get("user assessment link"),
+      configLink:         row.get("config link"),
+      detailsLink:        row.get("details link"),
     };
   }).filter(r => r.uniqueExamId || r.niatId || r.studentUid);
 }
 
-function parseSessionSkillLevel(title) {
-  if (!title) return { skill: "", level: "" };
-  const m = title.match(/^(.*?)\s*-\s*(L\d+)$/i);
-  return m ? { skill: m[1].trim(), level: m[2].toUpperCase() } : { skill: title.trim(), level: "" };
-}
-
 export default function InvitedStudents({ S, showToast }) {
-  const [activeTab, setActiveTab]     = useState("students");
-  const [bookingRows, setBookingRows] = useState([]);
-  const [examSessions, setExamSessions] = useState([]);
-  const [loading, setLoading]         = useState(true);
+  const { bookingRows, examSessions, setExamSessions, dataLoading, refreshData } = useData();
+  const [activeTab, setActiveTab] = useState("students");
 
   // students tab state
   const [filters, setFilters] = useState(FILTER_INIT);
@@ -115,18 +80,6 @@ export default function InvitedStudents({ S, showToast }) {
   const studentsCsvInputRef                               = useRef(null);
   const [studentsUploadPreview, setStudentsUploadPreview] = useState(null);
   const [studentsUploading, setStudentsUploading]         = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [bookingsData, sessionsData] = await Promise.all([getBookings(), getSessions()]);
-      setBookingRows(bookingsData || []);
-      setExamSessions(sessionsData || []);
-    } catch { /* silent */ }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   const sessionMap = useMemo(() => {
     const m = new Map();
@@ -184,8 +137,7 @@ export default function InvitedStudents({ S, showToast }) {
     });
   }, [rows, filters, search]);
 
-  const pages   = Math.ceil(filtered.length / PAGE_SIZE);
-  const paged   = filtered.slice((pg - 1) * PAGE_SIZE, pg * PAGE_SIZE);
+  const paged = filtered.slice((pg - 1) * PAGE_SIZE, pg * PAGE_SIZE);
   const setFilter   = (key, val) => { setFilters(f => ({ ...f, [key]: val })); setPg(1); };
   const resetFilters = () => { setFilters(FILTER_INIT); setSearch(""); setPg(1); };
   const anyActive = Object.values(filters).some(v => v !== "All") || search.trim() !== "";
@@ -218,21 +170,21 @@ export default function InvitedStudents({ S, showToast }) {
       return true;
     }), [examSessions, t2Filters]);
 
-  const t2Pages = Math.ceil(t2Filtered.length / PAGE_SIZE);
   const t2Paged = t2Filtered.slice((t2Page - 1) * PAGE_SIZE, t2Page * PAGE_SIZE);
   const t2AnyActive = Object.values(t2Filters).some(v => v !== "All");
 
   const handleMarkPublished = async () => {
     if (!markModal?.topinId?.trim()) return;
     try {
-      await updateSession(markModal.session.id, {
+      const updates = {
         publishStatus: "published",
         topinAssessmentId: markModal.topinId.trim(),
         assessmentLink: markModal.link.trim() || null,
-      });
+      };
+      await updateSession(markModal.session.id, updates);
+      setExamSessions(ss => ss.map(s => s.id === markModal.session.id ? { ...s, ...updates } : s));
       showToast("Marked as published.");
       setMarkModal(null);
-      load();
     } catch { showToast("Failed to update.", "error"); }
   };
 
@@ -259,12 +211,12 @@ export default function InvitedStudents({ S, showToast }) {
       const { updated, notFound } = await bulkUpdateSessionsFromCsv(uploadPreview.rows);
       showToast(`${updated} session(s) updated${notFound ? `, ${notFound} Unique Exam ID(s) not found` : ""}.`);
       setUploadPreview(null);
-      await load();
+      await refreshData();
     } catch (err) {
       showToast(err.message || "Upload failed.", "error");
     }
     setUploading(false);
-  }, [uploadPreview, load, showToast]);
+  }, [uploadPreview, refreshData, showToast]);
 
   const handleStudentsCsvFile = useCallback((file) => {
     const reader = new FileReader();
@@ -308,12 +260,12 @@ export default function InvitedStudents({ S, showToast }) {
       const skipped = (result.sessionsNotFound || 0) + (result.studentsNotFound || 0);
       showToast((parts.join(", ") || "Nothing to update") + (skipped ? ` (${skipped} skipped)` : "") + ".");
       setStudentsUploadPreview(null);
-      await load();
+      await refreshData();
     } catch (err) {
       showToast(err.message || "Upload failed.", "error");
     }
     setStudentsUploading(false);
-  }, [studentsUploadPreview, load, showToast]);
+  }, [studentsUploadPreview, refreshData, showToast]);
 
   // ── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -322,43 +274,33 @@ export default function InvitedStudents({ S, showToast }) {
   };
 
   const downloadStudentsCSV = () => {
-    const headers = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite Status","User Assessment Link","Config Link","Details Link"];
-    const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const csvRows = [
-      headers.map(esc).join(","),
-      ...filtered.map(r => [
+    downloadCSV(
+      filtered.map(r => [
         r.studentName, r.niatId, r.studentUid, r.skill, r.skillLevel,
         r.contestDate, r.timeSlot, r.campus ?? "", r.uniqueExamId,
         r.inviteStatus === "sent" ? "Sent" : r.inviteStatus === "failed" ? "Failed" : "Not Sent",
         r.userAssessmentLink ?? "", r.viewAssessmentUrl ?? "", r.viewDetailsUrl ?? "",
-      ].map(esc).join(",")),
-    ];
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csvRows.join("\n")], { type: "text/csv" }));
-    a.download = `invited-students${filters.contestDate !== "All" ? `-${filters.contestDate}` : ""}.csv`;
-    a.click();
+      ]),
+      ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite Status","User Assessment Link","Config Link","Details Link"],
+      `invited-students${filters.contestDate !== "All" ? `-${filters.contestDate}` : ""}.csv`
+    );
   };
 
   const downloadAssessmentsCSV = () => {
-    const h = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
-    const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const csvRows = [
-      h.map(esc).join(","),
-      ...t2Filtered.map(s => [
+    downloadCSV(
+      t2Filtered.map(s => [
         s.assessmentTitle, s.dateOfAssessment, s.startTimeSlot, s.endTimeSlot,
         s.uniqueExamId, s.exitPin, s.topinAssessmentId ?? "", s.publishStatus ?? "pending",
         s.viewAssessmentUrl ?? "", s.assessmentLink ?? "", s.viewDetailsUrl ?? "",
-      ].map(esc).join(",")),
-    ];
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csvRows.join("\n")], { type: "text/csv" }));
-    a.download = `unique-assessments${t2Filters.dateOfAssessment !== "All" ? `-${t2Filters.dateOfAssessment}` : ""}.csv`;
-    a.click();
+      ]),
+      ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],
+      `unique-assessments${t2Filters.dateOfAssessment !== "All" ? `-${t2Filters.dateOfAssessment}` : ""}.csv`
+    );
   };
 
   const selStyle = { ...S.select, width: "auto", minWidth: 120 };
 
-  if (loading) return (
+  if (dataLoading) return (
     <div style={{ padding: "80px 48px", color: "#94a3b8", fontFamily: "'Inter', sans-serif", fontSize: 14 }}>Loading…</div>
   );
 
@@ -405,7 +347,7 @@ export default function InvitedStudents({ S, showToast }) {
               )}
             </>
           )}
-          <button onClick={load} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>Refresh</button>
+          <button onClick={refreshData} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap" }}>Refresh</button>
         </div>
       </div>
 
@@ -510,24 +452,7 @@ export default function InvitedStudents({ S, showToast }) {
                       </tbody>
                     </table>
                   </div>
-                  {pages > 1 && (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, paddingTop: 16, borderTop: "1px solid #e2e8f0" }}>
-                      <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Inter', sans-serif" }}>
-                        {(pg - 1) * PAGE_SIZE + 1}–{Math.min(pg * PAGE_SIZE, filtered.length)} of {filtered.length}
-                      </span>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {[["«",1],["‹",pg-1]].map(([lbl,p]) => (
-                          <button key={lbl} disabled={pg===1} onClick={() => setPg(p)}
-                            style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, opacity: pg===1?0.35:1 }}>{lbl}</button>
-                        ))}
-                        <span style={{ padding: "6px 14px", fontSize: 12, color: "#475569", background: "#f1f5f9", borderRadius: 8 }}>{pg} / {pages}</span>
-                        {[["›",pg+1],["»",pages]].map(([lbl,p]) => (
-                          <button key={lbl} disabled={pg===pages} onClick={() => setPg(p)}
-                            style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, opacity: pg===pages?0.35:1 }}>{lbl}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <Pagination page={pg} total={filtered.length} onPage={setPg} S={S} />
                 </>
               )}
             </div>
@@ -603,24 +528,7 @@ export default function InvitedStudents({ S, showToast }) {
                       </tbody>
                     </table>
                   </div>
-                  {t2Pages > 1 && (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, paddingTop: 16, borderTop: "1px solid #e2e8f0" }}>
-                      <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Inter', sans-serif" }}>
-                        {(t2Page - 1) * PAGE_SIZE + 1}–{Math.min(t2Page * PAGE_SIZE, t2Filtered.length)} of {t2Filtered.length}
-                      </span>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {[["«",1],["‹",t2Page-1]].map(([lbl,p]) => (
-                          <button key={lbl} disabled={t2Page===1} onClick={() => setT2Page(p)}
-                            style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, opacity: t2Page===1?0.35:1 }}>{lbl}</button>
-                        ))}
-                        <span style={{ padding: "6px 14px", fontSize: 12, color: "#475569", background: "#f1f5f9", borderRadius: 8 }}>{t2Page} / {t2Pages}</span>
-                        {[["›",t2Page+1],["»",t2Pages]].map(([lbl,p]) => (
-                          <button key={lbl} disabled={t2Page===t2Pages} onClick={() => setT2Page(p)}
-                            style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, opacity: t2Page===t2Pages?0.35:1 }}>{lbl}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <Pagination page={t2Page} total={t2Filtered.length} onPage={setT2Page} S={S} />
                 </>
               )}
             </div>

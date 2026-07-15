@@ -1,26 +1,17 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import { getInterviews, bulkCreateInterviews } from "./api/firestore";
+import { parseCSVLine } from "./utils/csv";
+import Pagination from "./components/Pagination";
+import BadgeEligibility from "./BadgeEligibility";
 
 const PAGE_SIZE = 20;
-
-function splitCSVRow(line) {
-  const vals = []; let inQ = false, cur = "";
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') {
-      if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ;
-    } else if (c === "," && !inQ) { vals.push(cur); cur = ""; } else cur += c;
-  }
-  vals.push(cur);
-  return vals.map(v => v.trim().replace(/^"|"$/g, ""));
-}
 
 function parseInterviewCSV(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return { error: "CSV must have a header row and at least one data row." };
 
-  const headers = splitCSVRow(lines[0]).map(h => h.toLowerCase().trim());
+  const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
   const get = (vals, ...keys) => {
     for (const key of keys) {
       const i = headers.indexOf(key);
@@ -31,7 +22,7 @@ function parseInterviewCSV(text) {
 
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
-    const vals = splitCSVRow(lines[i]);
+    const vals = parseCSVLine(lines[i]);
     const candidateName = get(vals, "candidate name");
     if (!candidateName) continue;
     const panelistEmail = get(vals, "panelist email").toLowerCase();
@@ -56,28 +47,6 @@ function parseInterviewCSV(text) {
 
   if (rows.length === 0) return { error: "No valid data rows found." };
   return { rows };
-}
-
-function Pager({ page, total, onPage, S }) {
-  const pages = Math.ceil(total / PAGE_SIZE);
-  if (pages <= 1) return null;
-  const from = (page - 1) * PAGE_SIZE + 1, to = Math.min(page * PAGE_SIZE, total);
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, paddingTop: 16, borderTop: "1px solid #e2e8f0" }}>
-      <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Inter', sans-serif" }}>{from}–{to} of {total}</span>
-      <div style={{ display: "flex", gap: 6 }}>
-        {[["«", 1], ["‹", page - 1]].map(([lbl, pg]) => (
-          <button key={lbl} disabled={page === 1} onClick={() => onPage(pg)}
-            style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, opacity: page === 1 ? 0.35 : 1 }}>{lbl}</button>
-        ))}
-        <span style={{ padding: "6px 14px", fontSize: 12, color: "#475569", background: "#f1f5f9", borderRadius: 8 }}>{page} / {pages}</span>
-        {[["›", page + 1], ["»", pages]].map(([lbl, pg]) => (
-          <button key={lbl} disabled={page === pages} onClick={() => onPage(pg)}
-            style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, opacity: page === pages ? 0.35 : 1 }}>{lbl}</button>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function statusColor(s) {
@@ -234,7 +203,7 @@ export default function InterviewerView({ S, showToast }) {
               </tbody>
             </table>
           </div>
-          <Pager page={pg} total={filtered.length} onPage={setPg} S={S} />
+          <Pagination page={pg} total={filtered.length} onPage={setPg} S={S} />
         </>
       )}
     </div>
@@ -248,7 +217,7 @@ export default function InterviewerView({ S, showToast }) {
         <span style={S.headerTitle}>{isAdmin ? "Interview Schedule" : "My Interviews"}</span>
         {isAdmin && (
           <nav style={S.nav}>
-            {[["all", "All Interviews"], ["upload", "Upload Schedule"]].map(([key, label]) => (
+            {[["all", "All Interviews"], ["upload", "Upload Schedule"], ["badge", "Badge Eligibility"]].map(([key, label]) => (
               <button key={key} style={S.navItem(tab === key)} onClick={() => setTab(key)}>{label}</button>
             ))}
           </nav>
@@ -321,6 +290,11 @@ export default function InterviewerView({ S, showToast }) {
               )}
             </div>
           </div>
+        )}
+
+        {/* ── BADGE ELIGIBILITY (admin only) ── */}
+        {isAdmin && tab === "badge" && (
+          <BadgeEligibility S={S} showToast={showToast} />
         )}
 
         {/* ── ALL INTERVIEWS (admin) or MY INTERVIEWS (interviewer) ── */}

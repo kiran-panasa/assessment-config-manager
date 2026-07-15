@@ -1,10 +1,10 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, writeBatch, arrayUnion, arrayRemove, onSnapshot,
+  query, where, orderBy, limit, writeBatch, arrayUnion, arrayRemove,
 } from "firebase/firestore";
 
-function cutoffDate() {
+export function cutoffDate() {
   return new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
@@ -30,7 +30,7 @@ export async function createUserProfile(uid, data) {
 }
 
 export async function getAllUsers() {
-  const snap = await getDocs(collection(db, "users"));
+  const snap = await getDocs(query(collection(db, "users"), limit(500)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
@@ -45,7 +45,7 @@ export async function deleteUser(id) {
 // ── Roles ─────────────────────────────────────────────────────────────────────
 
 export async function getAllRoles() {
-  const snap = await getDocs(collection(db, "roles"));
+  const snap = await getDocs(query(collection(db, "roles"), limit(100)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
@@ -69,7 +69,7 @@ export async function deleteRole(id) {
 // ── Assessments ───────────────────────────────────────────────────────────────
 
 export async function getAssessments() {
-  const snap = await getDocs(collection(db, "assessments"));
+  const snap = await getDocs(query(collection(db, "assessments"), limit(500)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
@@ -180,17 +180,21 @@ export async function getSessions() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-export async function getPublishedSessions(date) {
-  let q = query(collection(db, "examSessions"), where("publishStatus", "==", "published"));
-  const snap = await getDocs(q);
+export async function getPublishedSessions() {
+  const snap = await getDocs(query(
+    collection(db, "examSessions"),
+    where("publishStatus", "==", "published"),
+    where("dateOfAssessment", ">=", cutoffDate()),
+    orderBy("dateOfAssessment", "asc"),
+  ));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 export async function getAllSessionsForDate(date) {
-  let q = date
-    ? query(collection(db, "examSessions"), where("dateOfAssessment", "==", date))
-    : query(collection(db, "examSessions"));
-  const snap = await getDocs(q);
+  const snap = await getDocs(query(
+    collection(db, "examSessions"),
+    where("dateOfAssessment", "==", date),
+  ));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
@@ -211,7 +215,11 @@ export async function bulkDeleteSessions(ids) {
 }
 
 export async function bulkUpdateSessionsFromCsv(csvRows) {
-  const snap = await getDocs(collection(db, "examSessions"));
+  const snap = await getDocs(query(
+    collection(db, "examSessions"),
+    where("dateOfAssessment", ">=", cutoffDate()),
+    orderBy("dateOfAssessment", "asc"),
+  ));
   const byExamId = new Map();
   snap.docs.forEach(d => {
     const uid = d.data().uniqueExamId;
@@ -255,7 +263,11 @@ export async function bulkSyncFromStudentsCsv(csvRows) {
   }
 
   // Update examSessions: mark published + fill links
-  const sessionsSnap = await getDocs(collection(db, "examSessions"));
+  const sessionsSnap = await getDocs(query(
+    collection(db, "examSessions"),
+    where("dateOfAssessment", ">=", cutoffDate()),
+    orderBy("dateOfAssessment", "asc"),
+  ));
   const sessionDocMap = new Map();
   sessionsSnap.docs.forEach(d => {
     const uid = d.data().uniqueExamId;
@@ -282,7 +294,11 @@ export async function bulkSyncFromStudentsCsv(csvRows) {
   }
 
   // Update bookingRows: set inviteStatus for sent/failed rows
-  const bookingsSnap = await getDocs(collection(db, "bookingRows"));
+  const bookingsSnap = await getDocs(query(
+    collection(db, "bookingRows"),
+    where("contestDate", ">=", cutoffDate()),
+    orderBy("contestDate", "asc"),
+  ));
   const byNiatId     = new Map();
   const byStudentUid = new Map();
   bookingsSnap.docs.forEach(d => {
@@ -328,10 +344,16 @@ export async function saveSettings(data) {
 
 export async function getInterviews(userEmail, isAdmin) {
   const snap = isAdmin
-    ? await getDocs(collection(db, "scheduledInterviews"))
+    ? await getDocs(query(
+        collection(db, "scheduledInterviews"),
+        where("interviewDate", ">=", cutoffDate()),
+        orderBy("interviewDate", "asc"),
+      ))
     : await getDocs(query(
         collection(db, "scheduledInterviews"),
         where("panelistEmail", "==", (userEmail || "").toLowerCase()),
+        where("interviewDate", ">=", cutoffDate()),
+        orderBy("interviewDate", "asc"),
       ));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
@@ -374,6 +396,89 @@ export async function checkInvitedEmail(email) {
   return { id: snap.id, ...snap.data() };
 }
 
+// ── Badge Eligibility ─────────────────────────────────────────────────────────
+
+export async function getBadgeConfig() {
+  const snap = await getDoc(doc(db, "badgeConfig", "main"));
+  if (!snap.exists()) return { tracks: [], levels: [] };
+  const d = snap.data();
+  return { tracks: d.tracks || [], levels: d.levels || [] };
+}
+
+export async function addBadgeTrack(track) {
+  await setDoc(doc(db, "badgeConfig", "main"), { tracks: arrayUnion(track.trim()) }, { merge: true });
+}
+
+export async function removeBadgeTrack(track) {
+  await setDoc(doc(db, "badgeConfig", "main"), { tracks: arrayRemove(track) }, { merge: true });
+}
+
+export async function addBadgeLevel(level) {
+  await setDoc(doc(db, "badgeConfig", "main"), { levels: arrayUnion(level.trim()) }, { merge: true });
+}
+
+export async function removeBadgeLevel(level) {
+  await setDoc(doc(db, "badgeConfig", "main"), { levels: arrayRemove(level) }, { merge: true });
+}
+
+export async function getBadgeEligibleStudents() {
+  const snap = await getDocs(collection(db, "badgeEligibleStudents"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function bulkSaveBadgeStudents(rows, mode) {
+  const now = new Date().toISOString();
+  if (mode === "replace") {
+    const combos = new Set(rows.map(r => `${r.track}||${r.level}`));
+    const snap = await getDocs(collection(db, "badgeEligibleStudents"));
+    const toDelete = snap.docs.filter(d => {
+      const x = d.data(); return combos.has(`${x.track}||${x.level}`);
+    });
+    for (let i = 0; i < toDelete.length; i += 499) {
+      const batch = writeBatch(db);
+      toDelete.slice(i, i + 499).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    for (let i = 0; i < rows.length; i += 499) {
+      const batch = writeBatch(db);
+      rows.slice(i, i + 499).forEach(row =>
+        batch.set(doc(collection(db, "badgeEligibleStudents")), { ...row, uploadedAt: now })
+      );
+      await batch.commit();
+    }
+    return { added: rows.length, skipped: 0, replaced: toDelete.length };
+  } else {
+    const snap = await getDocs(collection(db, "badgeEligibleStudents"));
+    const existing = new Set(snap.docs.map(d => {
+      const x = d.data(); return `${x.track}||${x.level}||${x.studentUid}`;
+    }));
+    const newRows = rows.filter(r => !existing.has(`${r.track}||${r.level}||${r.studentUid}`));
+    for (let i = 0; i < newRows.length; i += 499) {
+      const batch = writeBatch(db);
+      newRows.slice(i, i + 499).forEach(row =>
+        batch.set(doc(collection(db, "badgeEligibleStudents")), { ...row, uploadedAt: now })
+      );
+      await batch.commit();
+    }
+    return { added: newRows.length, skipped: rows.length - newRows.length, replaced: 0 };
+  }
+}
+
+export async function deleteBadgeStudents(track, level) {
+  const q = (track && level)
+    ? query(collection(db, "badgeEligibleStudents"), where("track", "==", track), where("level", "==", level))
+    : track
+    ? query(collection(db, "badgeEligibleStudents"), where("track", "==", track))
+    : collection(db, "badgeEligibleStudents");
+  const snap = await getDocs(q);
+  for (let i = 0; i < snap.docs.length; i += 499) {
+    const batch = writeBatch(db);
+    snap.docs.slice(i, i + 499).forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+  return snap.docs.length;
+}
+
 // ── Logs ──────────────────────────────────────────────────────────────────────
 
 export async function createLog(data) {
@@ -381,26 +486,6 @@ export async function createLog(data) {
     ...data,
     createdAt: new Date().toISOString(),
   });
-}
-
-// ── Real-time listeners ───────────────────────────────────────────────────────
-
-export function subscribeToSessions(callback) {
-  const q = query(
-    collection(db, "examSessions"),
-    where("dateOfAssessment", ">=", cutoffDate()),
-    orderBy("dateOfAssessment", "asc"),
-  );
-  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-}
-
-export function subscribeToBookings(callback) {
-  const q = query(
-    collection(db, "bookingRows"),
-    where("contestDate", ">=", cutoffDate()),
-    orderBy("contestDate", "asc"),
-  );
-  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 }
 
 // ── Invite (client-side) ──────────────────────────────────────────────────────

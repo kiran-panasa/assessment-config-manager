@@ -2,6 +2,25 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import { getAllUsers, updateUser, deleteUser, getAllRoles, createRole, updateRole, deleteRole, getInvitedEmails, addInvitedEmail, removeInvitedEmail } from "./api/firestore";
 
+function ConfirmModal({ title, message, confirmLabel = "Confirm", danger = false, onConfirm, onCancel, S }) {
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999 }}>
+      <div style={{ background:"#fff",borderRadius:12,padding:"32px 36px",maxWidth:440,width:"90%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)" }}>
+        <div style={{ fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:17,color:"#0f172a",marginBottom:10 }}>{title}</div>
+        <div style={{ fontSize:13,color:"#64748b",lineHeight:1.7,marginBottom:28 }}>{message}</div>
+        <div style={{ display:"flex",gap:12,justifyContent:"flex-end" }}>
+          <button onClick={onCancel} style={{ ...S.btn("secondary"),padding:"10px 20px" }}>Cancel</button>
+          <button onClick={onConfirm}
+            style={{ ...S.btn(danger ? "danger" : "primary"), padding:"10px 20px",
+              ...(danger ? { background:"#ef4444", color:"#fff", border:"none" } : {}) }}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const ALL_PAGES = [
   { key: "assessments",  label: "Assessment Configurations" },
   { key: "bookings",     label: "Student Bookings" },
@@ -53,6 +72,7 @@ export default function AdminPanel({ S, showToast }) {
   const [newRoleName, setNewRoleName] = useState("");
   const [newRolePages, setNewRolePages] = useState([]);
   const [saving, setSaving] = useState({});
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [invitedEmails, setInvitedEmails] = useState([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("");
@@ -90,14 +110,12 @@ export default function AdminPanel({ S, showToast }) {
     if (!role) { showToast("Select a role first.", "error"); return; }
     setSavingKey(user.id, true);
     try {
-      await updateUser(user.id, {
-        role, status: "active",
-        approvedBy: currentUser?.email || currentUser?.uid || "",
-        approvedAt: new Date().toISOString(),
-      });
+      const updates = { role, status: "active", approvedBy: currentUser?.email || currentUser?.uid || "", approvedAt: new Date().toISOString() };
+      await updateUser(user.id, updates);
       showToast(`${user.email} approved.`);
+      setPendingUsers(ps => ps.filter(u => u.id !== user.id));
+      setActiveUsers(as => [...as, { ...user, ...updates }]);
       setPendingRoleMap(m => { const n = { ...m }; delete n[user.id]; return n; });
-      loadData();
     } catch { showToast("Failed to approve.", "error"); }
     setSavingKey(user.id, false);
   };
@@ -105,47 +123,73 @@ export default function AdminPanel({ S, showToast }) {
   const isAdminRole = (role) => role === "admin" || role === "super-admin";
   const adminCount = activeUsers.filter(u => isAdminRole(u.role)).length;
 
-  const handleRoleChange = async (user) => {
+  const handleRoleChange = (user) => {
     const newRole = userRoleMap[user.id];
     if (!newRole || newRole === user.role) return;
     if (isAdminRole(user.role) && !isAdminRole(newRole) && adminCount <= 1) {
       showToast("Cannot demote the last admin — assign another admin first.", "error"); return;
     }
     const roleName = roles.find(r => r.key === newRole)?.name || newRole;
-    if (!window.confirm(`Change role for ${user.email} to "${roleName}"?`)) return;
-    setSavingKey(user.id, true);
-    try {
-      await updateUser(user.id, { role: newRole });
-      showToast(`Role updated for ${user.email}.`);
-      setUserRoleMap(m => { const n = { ...m }; delete n[user.id]; return n; });
-      loadData();
-    } catch { showToast("Failed to update role.", "error"); }
-    setSavingKey(user.id, false);
+    setConfirmDialog({
+      title: "Change Role",
+      message: `Change role for ${user.email} to "${roleName}"?`,
+      confirmLabel: "Change Role",
+      danger: false,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setSavingKey(user.id, true);
+        try {
+          await updateUser(user.id, { role: newRole });
+          showToast(`Role updated for ${user.email}.`);
+          setActiveUsers(as => as.map(u => u.id === user.id ? { ...u, role: newRole } : u));
+          setUserRoleMap(m => { const n = { ...m }; delete n[user.id]; return n; });
+        } catch { showToast("Failed to update role.", "error"); }
+        setSavingKey(user.id, false);
+      },
+    });
   };
 
-  const handleRevoke = async (user) => {
+  const handleRevoke = (user) => {
     if (isAdminRole(user.role) && adminCount <= 1) {
       showToast("Cannot revoke the last admin — there would be no one to manage users.", "error"); return;
     }
-    if (!window.confirm(`Revoke access for ${user.email}? They will be moved back to Pending.`)) return;
-    setSavingKey(user.id + "_revoke", true);
-    try {
-      await updateUser(user.id, { status: "pending", role: null });
-      showToast(`Access revoked for ${user.email}.`);
-      loadData();
-    } catch { showToast("Failed to revoke access.", "error"); }
-    setSavingKey(user.id + "_revoke", false);
+    setConfirmDialog({
+      title: "Revoke Access",
+      message: `Revoke access for ${user.email}? They will be moved back to Pending and lose all permissions.`,
+      confirmLabel: "Revoke Access",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setSavingKey(user.id + "_revoke", true);
+        try {
+          await updateUser(user.id, { status: "pending", role: null });
+          showToast(`Access revoked for ${user.email}.`);
+          setActiveUsers(as => as.filter(u => u.id !== user.id));
+          setPendingUsers(ps => [...ps, { ...user, status: "pending", role: null }]);
+        } catch { showToast("Failed to revoke access.", "error"); }
+        setSavingKey(user.id + "_revoke", false);
+      },
+    });
   };
 
-  const handleDeleteUser = async (user) => {
-    if (!window.confirm(`Permanently delete ${user.email}? Their app profile will be removed. This cannot be undone.`)) return;
-    setSavingKey(user.id + "_delete", true);
-    try {
-      await deleteUser(user.id);
-      showToast(`${user.email} deleted.`);
-      loadData();
-    } catch { showToast("Failed to delete user.", "error"); }
-    setSavingKey(user.id + "_delete", false);
+  const handleDeleteUser = (user) => {
+    setConfirmDialog({
+      title: "Delete User",
+      message: `Permanently delete ${user.email}? Their app profile will be removed. This cannot be undone.`,
+      confirmLabel: "Delete Permanently",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setSavingKey(user.id + "_delete", true);
+        try {
+          await deleteUser(user.id);
+          showToast(`${user.email} deleted.`);
+          setPendingUsers(ps => ps.filter(u => u.id !== user.id));
+          setActiveUsers(as => as.filter(u => u.id !== user.id));
+        } catch { showToast("Failed to delete user.", "error"); }
+        setSavingKey(user.id + "_delete", false);
+      },
+    });
   };
 
   const handleTogglePage = async (roleId, pageKey, currentPages) => {
@@ -154,7 +198,7 @@ export default function AdminPanel({ S, showToast }) {
       : [...currentPages, pageKey];
     try {
       await updateRole(roleId, { pages: newPages });
-      loadData();
+      setRoles(rs => rs.map(r => r.id === roleId ? { ...r, pages: newPages } : r));
     } catch { showToast("Failed to update access.", "error"); }
   };
 
@@ -166,8 +210,8 @@ export default function AdminPanel({ S, showToast }) {
     try {
       await createRole(key, name, newRolePages);
       showToast(`Role "${name}" created.`);
+      setRoles(rs => [...rs, { id: key, key, name, pages: newRolePages || [], createdAt: new Date().toISOString() }].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")));
       setNewRoleName(""); setNewRolePages([]);
-      loadData();
     } catch { showToast("Failed to create role.", "error"); }
   };
 
@@ -177,11 +221,12 @@ export default function AdminPanel({ S, showToast }) {
     if (!inviteRole) { showToast("Select a role.", "error"); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast("Enter a valid email address.", "error"); return; }
     setInviteAdding(true);
+    const norm = email.toLowerCase().trim();
     try {
       await addInvitedEmail(email, inviteRole, currentUser?.email || currentUser?.uid || "");
       showToast(`${email} added to invite list.`);
+      setInvitedEmails(es => [{ id: norm, email: norm, role: inviteRole, invitedBy: currentUser?.email, invitedAt: new Date().toISOString() }, ...es]);
       setInviteEmail(""); setInviteRole("");
-      loadData();
     } catch (err) { showToast(err.message || "Failed to add invite.", "error"); }
     setInviteAdding(false);
   };
@@ -191,7 +236,7 @@ export default function AdminPanel({ S, showToast }) {
     try {
       await removeInvitedEmail(invite.id);
       showToast(`Invite removed for ${invite.email}.`);
-      loadData();
+      setInvitedEmails(es => es.filter(e => e.id !== invite.id));
     } catch { showToast("Failed to remove invite.", "error"); }
     setSavingKey(invite.id + "_inv", false);
   };
@@ -202,7 +247,7 @@ export default function AdminPanel({ S, showToast }) {
     try {
       await deleteRole(role.id);
       showToast(`Role "${role.name}" deleted.`);
-      loadData();
+      setRoles(rs => rs.filter(r => r.id !== role.id));
     } catch (err) { showToast(err.message || "Failed to delete role.", "error"); }
   };
 
@@ -551,6 +596,18 @@ export default function AdminPanel({ S, showToast }) {
         )}
 
       </div>
+
+      {confirmDialog && (
+        <ConfirmModal
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
+          danger={confirmDialog.danger}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+          S={S}
+        />
+      )}
     </div>
   );
 }
