@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useMemo, useEffect } from "react";
-import { getBookingsForDate, getAllSessionsForDate } from "./api/firestore";
+import { getBookingsForDate, getAllSessionsForDate, getBookingsForDateRange, getSessionsForDateRange } from "./api/firestore";
 
 const DataContext = createContext(null);
 
@@ -7,12 +7,10 @@ export function useData() {
   return useContext(DataContext);
 }
 
-function lastNDates(n) {
-  return Array.from({ length: n }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    return d.toISOString().slice(0, 10);
-  });
+function nDaysAgoDate(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
 }
 
 export function DataProvider({ children }) {
@@ -21,17 +19,18 @@ export function DataProvider({ children }) {
   const [selectedDate, setSelectedDate] = useState("");
   const [dataLoading,  setDataLoading]  = useState(false);
 
-  // Load last 3 days — called on mount and when the date picker is cleared
+  // Load last 3 days in 2 range queries (1 for bookings, 1 for sessions)
   const loadDefault = useCallback(async () => {
     setDataLoading(true);
     try {
-      const dates = lastNDates(3);
-      const results = await Promise.all([
-        ...dates.map(d => getBookingsForDate(d)),
-        ...dates.map(d => getAllSessionsForDate(d)),
+      const from = nDaysAgoDate(2); // 2 days ago
+      const to   = nDaysAgoDate(0); // today
+      const [bookings, sessions] = await Promise.all([
+        getBookingsForDateRange(from, to),
+        getSessionsForDateRange(from, to),
       ]);
-      setBookingRows(results.slice(0, 3).flat().filter(Boolean));
-      setExamSessions(results.slice(3).flat().filter(Boolean));
+      setBookingRows(bookings || []);
+      setExamSessions(sessions || []);
       setSelectedDate("");
     } catch { /* silent */ }
     setDataLoading(false);

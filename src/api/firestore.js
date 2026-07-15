@@ -156,6 +156,16 @@ export async function getBookingsForDate(date) {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
+export async function getBookingsForDateRange(from, to) {
+  const q = query(
+    collection(db, "bookingRows"),
+    where("contestDate", ">=", from),
+    where("contestDate", "<=", to),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
 export async function deleteBooking(id) {
   await deleteDoc(doc(db, "bookingRows", id));
 }
@@ -194,6 +204,15 @@ export async function getAllSessionsForDate(date) {
   const snap = await getDocs(query(
     collection(db, "examSessions"),
     where("dateOfAssessment", "==", date),
+  ));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function getSessionsForDateRange(from, to) {
+  const snap = await getDocs(query(
+    collection(db, "examSessions"),
+    where("dateOfAssessment", ">=", from),
+    where("dateOfAssessment", "<=", to),
   ));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
