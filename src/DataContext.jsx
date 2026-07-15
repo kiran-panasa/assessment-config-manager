@@ -1,7 +1,6 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
-import { getBookings, cutoffDate } from "./api/firestore";
 
 const DataContext = createContext(null);
 
@@ -9,25 +8,35 @@ export function useData() {
   return useContext(DataContext);
 }
 
+// 30-day window for the UI — enough for active work, 3× fewer reads than 90 days
+function uiCutoffDate() {
+  return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 export function DataProvider({ children }) {
   const [bookingRows,  setBookingRows]  = useState(null);
   const [examSessions, setExamSessions] = useState(null);
 
-  // One-shot fetch for bookings (mutated locally via optimistic updates)
-  const refreshBookings = useCallback(async () => {
-    const data = await getBookings();
-    setBookingRows(data || []);
+  // Live listener for bookingRows — eliminates repeated getBookings() fetches on refreshData
+  useEffect(() => {
+    const q = query(
+      collection(db, "bookingRows"),
+      where("contestDate", ">=", uiCutoffDate()),
+      orderBy("contestDate", "asc")
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => setBookingRows(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      ()     => setBookingRows([])
+    );
+    return unsub;
   }, []);
 
-  useEffect(() => {
-    refreshBookings();
-  }, [refreshBookings]);
-
-  // Live Firestore listener for exam sessions — auto-reflects any write from any component
+  // Live listener for examSessions — auto-reflects any write from any component
   useEffect(() => {
     const q = query(
       collection(db, "examSessions"),
-      where("dateOfAssessment", ">=", cutoffDate()),
+      where("dateOfAssessment", ">=", uiCutoffDate()),
       orderBy("dateOfAssessment", "asc")
     );
     const unsub = onSnapshot(
@@ -38,11 +47,8 @@ export function DataProvider({ children }) {
     return unsub;
   }, []);
 
-  // refreshData refreshes bookings; sessions refresh automatically via the listener
-  const refreshData = useCallback(async () => {
-    const data = await getBookings();
-    setBookingRows(data || []);
-  }, []);
+  // No-op: both collections are kept live by onSnapshot — no re-fetch needed
+  const refreshData = useCallback(() => Promise.resolve(), []);
 
   const value = useMemo(() => ({
     bookingRows:  bookingRows  ?? [],
