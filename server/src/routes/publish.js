@@ -187,28 +187,6 @@ async function setExitPin(page, exitPin) {
   await exitInput.fill(exitPin);
 }
 
-async function ensureRadioSelected(container, testId) {
-  const option = container.locator(`input[data-testid="${testId}"]`).first();
-  await option.waitFor({ state: "attached", timeout: 10000 });
-  if (await option.isChecked().catch(() => false)) return;
-  await container.locator("label", { hasText: testId }).first().click();
-}
-
-async function setQrBasedAttendanceMode(page) {
-  await ensureInternalAdminOpen(page);
-  const container = page.locator('[data-testid="ao-qr-code-option"]');
-  if (!(await container.locator("label", { hasText: "During Exam" }).first().isVisible().catch(() => false)))
-    await container.getByRole("button", { name: "QR based Attendance Mode" }).click();
-  await ensureRadioSelected(container, "During Exam");
-}
-
-async function setExamPinMode(page) {
-  await ensureInternalAdminOpen(page);
-  const container = page.locator('[data-testid="ao-pin-to-start-enable-option"]');
-  if (!(await container.locator("label", { hasText: "Common Start PIN" }).first().isVisible().catch(() => false)))
-    await container.getByRole("button", { name: "Enable Exam PIN" }).click();
-  await ensureRadioSelected(container, "Common Start PIN");
-}
 
 function deriveUserUrl(assessmentLink) {
   try {
@@ -231,7 +209,7 @@ async function publishOneSession(page, session, assessments) {
   if (page.url().includes("accounts.ccbp.in"))
     throw new Error("Session expired — re-run with a fresh OTP.");
 
-  const cloneLocator = page.locator('button, a, [role="button"]').filter({ hasText: /clone/i }).first();
+  const cloneLocator = page.locator('button, a, [role="button"]').filter({ hasText: /clone assessment/i }).first();
   try { await cloneLocator.waitFor({ timeout: 90000 }); }
   catch {
     const btns = await page.evaluate(() =>
@@ -270,9 +248,6 @@ async function publishOneSession(page, session, assessments) {
   await setDateTimeField(page, "bscd-start-date-time-input", session.dateOfAssessment, session.startTimeSlot);
   await setDateTimeField(page, "bscd-end-date-time-input",   session.dateOfAssessment, session.endTimeSlot);
   await setExitPin(page, session.exitPin);
-  // Fix 2: set QR attendance + exam PIN mode (were missing entirely)
-  await setQrBasedAttendanceMode(page);
-  await setExamPinMode(page);
 
   await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click({ timeout: 30000 });
 
@@ -354,8 +329,19 @@ async function loginToTopin(page, mobile, otp) {
 
   const digits = otp.replace(/\D/g, "");
   if (digits.length !== 6) throw new Error("OTP must be exactly 6 digits.");
-  const otpInputs = page.locator('input[aria-label*="Digit"], input[aria-label*="verification code"]');
-  await otpInputs.first().waitFor({ timeout: 10000 });
+  const otpInputs = page.locator(
+    'input[aria-label*="Digit"], input[aria-label*="verification code"], input[maxlength="1"], input[type="tel"][maxlength="1"]'
+  );
+  try {
+    await otpInputs.first().waitFor({ timeout: 15000 });
+  } catch {
+    const allInputs = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("input"))
+        .map(el => ({ type: el.type, name: el.name, placeholder: el.placeholder, ariaLabel: el.getAttribute("aria-label"), maxlength: el.maxLength, id: el.id }))
+    ).catch(() => []);
+    broadcast("info", `  [DEBUG] OTP page inputs: ${JSON.stringify(allInputs)}`);
+    throw new Error("OTP input boxes not found within 15s.");
+  }
   for (let i = 0; i < 6; i++) { await otpInputs.nth(i).fill(digits[i]); await page.waitForTimeout(100); }
 
   await page.getByRole("button", { name: /Verify & Login/i }).click();
