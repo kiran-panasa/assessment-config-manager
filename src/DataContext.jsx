@@ -19,12 +19,14 @@ export function DataProvider({ children }) {
   const [selectedDate, setSelectedDate] = useState("");
   const [dataLoading,  setDataLoading]  = useState(false);
 
-  // Load last 3 days in 2 range queries (1 for bookings, 1 for sessions)
+  // Load today + tomorrow in 2 range queries (1 for bookings, 1 for sessions).
+  // Forward-looking window, not trailing — recomputed fresh each call so it
+  // rolls forward correctly if left open across midnight.
   const loadDefault = useCallback(async () => {
     setDataLoading(true);
     try {
-      const from = nDaysAgoDate(2); // 2 days ago
-      const to   = nDaysAgoDate(0); // today
+      const from = nDaysAgoDate(0);  // today
+      const to   = nDaysAgoDate(-1); // tomorrow
       const [bookings, sessions] = await Promise.all([
         getBookingsForDateRange(from, to),
         getSessionsForDateRange(from, to),
@@ -36,10 +38,10 @@ export function DataProvider({ children }) {
     setDataLoading(false);
   }, []);
 
-  // Auto-load last 3 days on mount
+  // Auto-load today + tomorrow on mount
   useEffect(() => { loadDefault(); }, [loadDefault]);
 
-  // Load a specific date; clearing the picker reloads the 3-day default
+  // Load a specific date; clearing the picker reloads the today+tomorrow default
   const loadForDate = useCallback(async (date) => {
     if (!date) return loadDefault();
     setDataLoading(true);
@@ -55,7 +57,7 @@ export function DataProvider({ children }) {
     setDataLoading(false);
   }, [loadDefault]);
 
-  // Re-fetch whatever is currently shown (specific date or 3-day default)
+  // Re-fetch whatever is currently shown (specific date or today+tomorrow default)
   const refreshData = useCallback(() => {
     if (selectedDate) return loadForDate(selectedDate);
     return loadDefault();
