@@ -4,6 +4,7 @@ import { getInterviews, bulkCreateInterviews } from "./api/firestore";
 import { parseCSVLine } from "./utils/csv";
 import Pagination from "./components/Pagination";
 import BadgeEligibility from "./BadgeEligibility";
+import CompletedInterviews from "./CompletedInterviews";
 
 const PAGE_SIZE = 20;
 
@@ -217,7 +218,7 @@ export default function InterviewerView({ S, showToast }) {
         <span style={S.headerTitle}>{isAdmin ? "Interview Schedule" : "My Interviews"}</span>
         {isAdmin && (
           <nav style={S.nav}>
-            {[["all", "All Interviews"], ["upload", "Upload Schedule"], ["badge", "Badge Eligibility"]].map(([key, label]) => (
+            {[["all", "All Interviews"], ["upload", "Upload Schedule"], ["completed", "Completed Interviews"], ["badge", "Badge Eligibility"]].map(([key, label]) => (
               <button key={key} style={S.navItem(tab === key)} onClick={() => setTab(key)}>{label}</button>
             ))}
           </nav>
@@ -290,6 +291,11 @@ export default function InterviewerView({ S, showToast }) {
               )}
             </div>
           </div>
+        )}
+
+        {/* ── COMPLETED INTERVIEWS (admin only) ── */}
+        {isAdmin && tab === "completed" && (
+          <CompletedInterviews S={S} showToast={showToast} />
         )}
 
         {/* ── BADGE ELIGIBILITY (admin only) ── */}

@@ -2,8 +2,9 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 
-import bookingsRouter from "./routes/bookings.js";
-import publishRouter  from "./routes/publish.js";
+import bookingsRouter   from "./routes/bookings.js";
+import publishRouter    from "./routes/publish.js";
+import interviewsRouter from "./routes/interviews.js";
 
 const app = express();
 
@@ -27,6 +28,9 @@ app.use("/api/bookings", bookingsRouter);
 // Local publish server: Playwright automation + SSE progress
 app.use("/api/publish",  publishRouter);
 
+// Interview Coordinator sync: pull completed NIAT interviews
+app.use("/api/interviews", interviewsRouter);
+
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 
 const PORT = process.env.PORT || 3001;
@@ -35,5 +39,6 @@ app.listen(PORT, () => {
   console.log(`  GET  /api/health`);
   console.log(`  GET  /api/bookings/fetch-db   (Replit DB proxy)`);
   console.log(`  POST /api/publish/run         (local Playwright runner)`);
-  console.log(`  GET  /api/publish/progress    (SSE stream)\n`);
+  console.log(`  GET  /api/publish/progress    (SSE stream)`);
+  console.log(`  POST /api/interviews/sync-completed (Interview Coordinator sync)\n`);
 });

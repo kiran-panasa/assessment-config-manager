@@ -388,6 +388,13 @@ export async function bulkCreateInterviews(rows) {
   }
 }
 
+// ── Completed Interviews (NIAT, synced from Interview Coordinator) ─────────────
+
+export async function getCompletedNiatInterviews() {
+  const snap = await getDocs(collection(db, "completedNiatInterviews"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
 // ── Pre-invited Emails ────────────────────────────────────────────────────────
 
 export async function getInvitedEmails() {

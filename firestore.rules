@@ -101,6 +101,16 @@ service cloud.firestore {
         && resource.data.panelistEmail == request.auth.token.email.lower();
     }
 
+    // ── Completed Interviews (synced from Interview Coordinator) ───────────────
+    match /completedNiatInterviews/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Sync metadata (last-synced watermark) ───────────────────────────────────
+    match /syncMeta/{id} {
+      allow read, write: if isAdmin();
+    }
+
     // ── Activity logs ─────────────────────────────────────────────────────────
     match /logs/{id} {
       allow create: if isActive();
