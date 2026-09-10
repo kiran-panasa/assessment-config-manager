@@ -132,9 +132,8 @@ async function publishSession(page, session, assessments) {
   console.log(`  ↗ Opening config URL...`);
   await page.goto(asmtConfig.url, { waitUntil: "networkidle" });
 
-  // ── TODO: adjust selectors to match the Topin "Clone" button/option ────────
   await page.click(
-    'button:has-text("Clone"), button:has-text("Duplicate"), a:has-text("Clone"), [data-action="clone"]',
+    'a:has-text("Clone Assessment"), button:has-text("Clone Assessment"), button:has-text("Clone"), a:has-text("Clone"), [data-action="clone"]',
   );
   await page.waitForNavigation({ waitUntil: "networkidle" }).catch(() => {});
   await page.waitForTimeout(1500);

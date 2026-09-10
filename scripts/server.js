@@ -330,8 +330,19 @@ async function loginToTopin(page, mobile, otp) {
   // OTP — split digit boxes
   const digits = otp.replace(/\D/g, '');
   if (digits.length !== 6) throw new Error('OTP must be exactly 6 digits.');
-  const otpInputs = page.locator('input[aria-label*="Digit"], input[aria-label*="verification code"]');
-  await otpInputs.first().waitFor({ timeout: 10000 });
+  const otpInputs = page.locator(
+    'input[aria-label*="Digit"], input[aria-label*="verification code"], input[maxlength="1"], input[type="tel"][maxlength="1"]'
+  );
+  try {
+    await otpInputs.first().waitFor({ timeout: 15000 });
+  } catch {
+    const allInputs = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('input'))
+        .map(el => ({ type: el.type, name: el.name, placeholder: el.placeholder, ariaLabel: el.getAttribute('aria-label'), maxlength: el.maxLength, id: el.id }))
+    ).catch(() => []);
+    broadcast("info", `  [DEBUG] OTP page inputs: ${JSON.stringify(allInputs)}`);
+    throw new Error("OTP input boxes not found within 15s.");
+  }
   for (let i = 0; i < 6; i++) {
     await otpInputs.nth(i).fill(digits[i]);
     await page.waitForTimeout(100);
@@ -489,10 +500,10 @@ async function publishOneSession(page, session, assessments) {
     throw new Error("Session invalid — redirected to login. Re-run Publish with a fresh OTP.");
   }
 
-  // ── 2. Clone button — wait up to 90s; page API calls can be slow on cloud ──
+  // ── 2. Clone Assessment button — wait up to 90s; page API calls can be slow on cloud ──
   // topin-cloner uses the same selector. The button appears after the SPA finishes
   // fetching assessment data, which can take 60+ seconds on Render's free tier.
-  const cloneLocator = page.locator('button, a, [role="button"]').filter({ hasText: /clone/i }).first();
+  const cloneLocator = page.locator('button, a, [role="button"]').filter({ hasText: /clone assessment/i }).first();
   try {
     await cloneLocator.waitFor({ timeout: 90000 });
   } catch {
