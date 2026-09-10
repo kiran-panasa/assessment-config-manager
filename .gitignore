@@ -6,3 +6,9 @@ dist/
 # Topin automation scripts — credentials and session files (never commit)
 scripts/config.js
 scripts/topin-session.json
+server/topin-session.json
+server/topin-network-log.json
+server/topin-network.har
+
+# OS junk
+.DS_Store
