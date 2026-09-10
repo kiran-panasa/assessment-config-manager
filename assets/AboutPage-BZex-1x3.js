@@ -1,4 +1,4 @@
-import{r as e}from"./index-Coud3ywR.js";var t=e(),n=`
+import{r as e}from"./index-S5Xh8yzh.js";var t=e(),n=`
   @media print {
     @page { margin: 18mm 16mm; }
     body { background: #fff !important; }
