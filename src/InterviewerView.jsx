@@ -70,11 +70,11 @@ export default function InterviewerView({ S, showToast }) {
   const [uploading, setUploading]     = useState(false);
   const fileRef = useRef(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     try {
       const email = currentUser?.email || "";
-      const data = await getInterviews(email, isAdmin);
+      const data = await getInterviews(email, isAdmin, force);
       const sorted = data.sort((a, b) =>
         (a.interviewDate || "").localeCompare(b.interviewDate || "") ||
         (a.interviewTime || "").localeCompare(b.interviewTime || "")
@@ -229,7 +229,7 @@ export default function InterviewerView({ S, showToast }) {
               ? `${filtered.length} of ${interviews.length} interviews`
               : `${interviews.length} interview${interviews.length !== 1 ? "s" : ""}`}
           </span>
-          <button onClick={load} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12 }}>Refresh</button>
+          <button onClick={() => load(true)} style={{ ...S.btn("secondary"), padding: "6px 14px", fontSize: 12 }}>Refresh</button>
         </div>
       </div>
 

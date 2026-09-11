@@ -45,10 +45,10 @@ export default function BadgeEligibility({ S, showToast }) {
   const [newTrack, setNewTrack] = useState("");
   const [newLevel, setNewLevel] = useState("");
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const [config, studentsData] = await Promise.all([getBadgeConfig(), getBadgeEligibleStudents()]);
+      const [config, studentsData] = await Promise.all([getBadgeConfig(), getBadgeEligibleStudents(force)]);
       setTracks(config.tracks);
       setLevels(config.levels);
       setStudents(studentsData);
@@ -181,7 +181,7 @@ export default function BadgeEligibility({ S, showToast }) {
           <button key={key} style={{ ...S.navItem(subTab === key), paddingLeft: 0, paddingRight: 20 }} onClick={() => setSubTab(key)}>{label}</button>
         ))}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", paddingBottom: 18, paddingTop: 18, gap: 10 }}>
-          <button onClick={loadData} style={{ ...S.btn("secondary"), padding: "5px 12px", fontSize: 11 }}>Refresh</button>
+          <button onClick={() => loadData(true)} style={{ ...S.btn("secondary"), padding: "5px 12px", fontSize: 11 }}>Refresh</button>
         </div>
       </div>
 

@@ -8,6 +8,25 @@ export function cutoffDate() {
   return new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+// ── In-memory read cache (per browser tab session) ──────────────────────────
+// Some collections (scheduled interviews, badge-eligible students, invited
+// emails) are read in full on every visit to their tab, which re-runs the
+// same expensive query every time a route component remounts on navigation.
+// This cache makes a repeat visit reuse the last result instead of re-reading
+// Firestore; write functions below invalidate the relevant key so the data
+// never goes stale, and callers can pass force=true (e.g. a "Refresh" button)
+// to always bypass it.
+const _readCache = new Map();
+function cacheInvalidate(prefix) {
+  for (const key of _readCache.keys()) if (key.startsWith(prefix)) _readCache.delete(key);
+}
+async function cachedRead(key, force, fetcher) {
+  if (!force && _readCache.has(key)) return _readCache.get(key);
+  const data = await fetcher();
+  _readCache.set(key, data);
+  return data;
+}
+
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 export async function getMyProfile(uid) {
@@ -361,20 +380,23 @@ export async function saveSettings(data) {
 
 // ── Interviews ────────────────────────────────────────────────────────────────
 
-export async function getInterviews(userEmail, isAdmin) {
-  const snap = isAdmin
-    ? await getDocs(query(
-        collection(db, "scheduledInterviews"),
-        where("interviewDate", ">=", cutoffDate()),
-        orderBy("interviewDate", "asc"),
-      ))
-    : await getDocs(query(
-        collection(db, "scheduledInterviews"),
-        where("panelistEmail", "==", (userEmail || "").toLowerCase()),
-        where("interviewDate", ">=", cutoffDate()),
-        orderBy("interviewDate", "asc"),
-      ));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+export async function getInterviews(userEmail, isAdmin, force = false) {
+  const key = `interviews:${isAdmin ? "admin" : (userEmail || "").toLowerCase()}`;
+  return cachedRead(key, force, async () => {
+    const snap = isAdmin
+      ? await getDocs(query(
+          collection(db, "scheduledInterviews"),
+          where("interviewDate", ">=", cutoffDate()),
+          orderBy("interviewDate", "asc"),
+        ))
+      : await getDocs(query(
+          collection(db, "scheduledInterviews"),
+          where("panelistEmail", "==", (userEmail || "").toLowerCase()),
+          where("interviewDate", ">=", cutoffDate()),
+          orderBy("interviewDate", "asc"),
+        ));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  });
 }
 
 export async function bulkCreateInterviews(rows) {
@@ -386,20 +408,25 @@ export async function bulkCreateInterviews(rows) {
     }
     await batch.commit();
   }
+  cacheInvalidate("interviews:");
 }
 
 // ── Completed Interviews (NIAT, synced from Interview Coordinator) ─────────────
 
-export async function getCompletedNiatInterviews() {
-  const snap = await getDocs(collection(db, "completedNiatInterviews"));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+export async function getCompletedNiatInterviews(force = false) {
+  return cachedRead("completedNiatInterviews", force, async () => {
+    const snap = await getDocs(collection(db, "completedNiatInterviews"));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  });
 }
 
 // ── Pre-invited Emails ────────────────────────────────────────────────────────
 
-export async function getInvitedEmails() {
-  const snap = await getDocs(collection(db, "invitedEmails"));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+export async function getInvitedEmails(force = false) {
+  return cachedRead("invitedEmails", force, async () => {
+    const snap = await getDocs(collection(db, "invitedEmails"));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  });
 }
 
 export async function addInvitedEmail(email, role, invitedBy) {
@@ -410,10 +437,12 @@ export async function addInvitedEmail(email, role, invitedBy) {
     email: norm, role, invitedBy,
     invitedAt: new Date().toISOString(),
   });
+  cacheInvalidate("invitedEmails");
 }
 
 export async function removeInvitedEmail(id) {
   await deleteDoc(doc(db, "invitedEmails", id));
+  cacheInvalidate("invitedEmails");
 }
 
 export async function checkInvitedEmail(email) {
@@ -447,9 +476,11 @@ export async function removeBadgeLevel(level) {
   await setDoc(doc(db, "badgeConfig", "main"), { levels: arrayRemove(level) }, { merge: true });
 }
 
-export async function getBadgeEligibleStudents() {
-  const snap = await getDocs(collection(db, "badgeEligibleStudents"));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+export async function getBadgeEligibleStudents(force = false) {
+  return cachedRead("badgeEligibleStudents", force, async () => {
+    const snap = await getDocs(collection(db, "badgeEligibleStudents"));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  });
 }
 
 export async function bulkSaveBadgeStudents(rows, mode) {
@@ -472,6 +503,7 @@ export async function bulkSaveBadgeStudents(rows, mode) {
       );
       await batch.commit();
     }
+    cacheInvalidate("badgeEligibleStudents");
     return { added: rows.length, skipped: 0, replaced: toDelete.length };
   } else {
     const snap = await getDocs(collection(db, "badgeEligibleStudents"));
@@ -486,6 +518,7 @@ export async function bulkSaveBadgeStudents(rows, mode) {
       );
       await batch.commit();
     }
+    cacheInvalidate("badgeEligibleStudents");
     return { added: newRows.length, skipped: rows.length - newRows.length, replaced: 0 };
   }
 }
@@ -502,6 +535,7 @@ export async function deleteBadgeStudents(track, level) {
     snap.docs.slice(i, i + 499).forEach(d => batch.delete(d.ref));
     await batch.commit();
   }
+  cacheInvalidate("badgeEligibleStudents");
   return snap.docs.length;
 }
 

@@ -16,10 +16,10 @@ export default function CompletedInterviews({ S, showToast }) {
   const [syncing, setSyncing]       = useState(false);
   const [syncError, setSyncError]   = useState(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const data = await getCompletedNiatInterviews();
+      const data = await getCompletedNiatInterviews(force);
       const sorted = data.sort((a, b) => (b.completedAt || "").localeCompare(a.completedAt || ""));
       setInterviews(sorted);
     } catch (err) { showToast(err.message, "error"); }
@@ -35,7 +35,7 @@ export default function CompletedInterviews({ S, showToast }) {
     try {
       const result = await api.post("/api/interviews/sync-completed");
       showToast(`Synced ${result.written} interview${result.written !== 1 ? "s" : ""}.`);
-      await load();
+      await load(true); // the write just happened server-side — must bypass the cache
     } catch (err) {
       // Keep showing whatever was already loaded — do not clear `interviews`.
       setSyncError(err.message);

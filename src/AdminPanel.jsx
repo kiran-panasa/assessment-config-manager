@@ -78,9 +78,9 @@ export default function AdminPanel({ S, showToast }) {
   const [inviteRole, setInviteRole] = useState("");
   const [inviteAdding, setInviteAdding] = useState(false);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (force = false) => {
     try {
-      const [usersData, rolesData, invitesData] = await Promise.all([getAllUsers(), getAllRoles(), getInvitedEmails()]);
+      const [usersData, rolesData, invitesData] = await Promise.all([getAllUsers(), getAllRoles(), getInvitedEmails(force)]);
       const sortByDate = (a, b) => {
         const aMs = a.createdAt?._seconds ? a.createdAt._seconds * 1000 : new Date(a.createdAt || 0).getTime();
         const bMs = b.createdAt?._seconds ? b.createdAt._seconds * 1000 : new Date(b.createdAt || 0).getTime();
@@ -267,7 +267,7 @@ export default function AdminPanel({ S, showToast }) {
             </button>
           ))}
         </nav>
-        <button onClick={loadData} style={{ ...S.btn("secondary"), marginLeft: "auto", padding: "6px 14px", fontSize: 12, marginBottom: 18, marginTop: 18 }}>
+        <button onClick={() => loadData(true)} style={{ ...S.btn("secondary"), marginLeft: "auto", padding: "6px 14px", fontSize: 12, marginBottom: 18, marginTop: 18 }}>
           Refresh
         </button>
       </div>
