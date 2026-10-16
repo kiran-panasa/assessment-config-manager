@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Topin Publisher</title>
+  <style>
+    body {
+      width: 300px; margin: 0; padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+      background: #ffffff; color: #0f172a;
+    }
+    h1 { font-size: 15px; font-weight: 700; margin: 0 0 14px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+    input {
+      width: 100%; box-sizing: border-box; padding: 8px 10px; margin-bottom: 12px;
+      border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px;
+    }
+    button {
+      width: 100%; padding: 10px; border: none; border-radius: 6px;
+      background: #00c896; color: #fff; font-weight: 600; font-size: 13px; cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: #f1f5f9; color: #475569; margin-top: 8px; }
+    #error { color: #ef4444; font-size: 12px; margin-top: 8px; display: none; }
+    #signedIn { display: none; text-align: center; }
+    #signedIn .email { font-size: 12px; color: #64748b; margin-bottom: 14px; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>Topin Publisher</h1>
+
+  <div id="loginForm">
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" />
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" />
+    <button id="signInBtn">Sign In</button>
+    <div id="error"></div>
+  </div>
+
+  <div id="signedIn">
+    <div class="email" id="signedInEmail"></div>
+    <button id="openRunnerBtn">Open Publisher</button>
+    <button id="signOutBtn" class="secondary">Sign Out</button>
+  </div>
+
+  <script type="module" src="dist/popup.js"></script>
+</body>
+</html>

@@ -3,6 +3,10 @@ dist/
 .env
 .env.local
 
+# topin-extension ships its built dist/ so it works unpacked with no build step
+!topin-extension/dist/
+!topin-extension/dist/**
+
 # Topin automation scripts — credentials and session files (never commit)
 scripts/config.js
 scripts/topin-session.json

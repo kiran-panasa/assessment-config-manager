@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Topin Publisher</title>
+  <style>
+    body {
+      margin: 0; padding: 32px; max-width: 760px; margin: 0 auto;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+      background: #f8fafc; color: #0f172a;
+    }
+    h1 { font-size: 20px; font-weight: 800; margin: 0 0 4px; }
+    .sub { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
+    .card {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+      padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(15,23,42,0.04);
+    }
+    label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+    input[type="date"] { padding: 7px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; width: 200px; }
+    .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    button {
+      padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer;
+    }
+    button.primary { background: #00c896; color: #fff; }
+    button.secondary { background: #f1f5f9; color: #475569; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+    .stat { background: #f8fafc; border-radius: 8px; padding: 12px 16px; }
+    .stat .n { font-size: 22px; font-weight: 800; }
+    .stat .l { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+    #log {
+      background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px;
+      font-family: 'SF Mono', 'DM Mono', monospace; font-size: 12px; line-height: 1.6;
+      height: 360px; overflow-y: auto; white-space: pre-wrap;
+    }
+    .l-info { color: #7eb8ff; }
+    .l-success { color: #00c896; }
+    .l-error { color: #ff5555; }
+    .l-warn { color: #f5a623; }
+    #authGate { display: none; }
+    #authGate input { width: 100%; box-sizing: border-box; padding: 8px 10px; margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; max-width: 280px; }
+    #authError { color: #ef4444; font-size: 12px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Topin Assessment Publisher</h1>
+  <div class="sub">Runs in this tab using your own logged-in Topin session — no server required.</div>
+
+  <div id="authGate" class="card">
+    <label for="authEmail">Email</label>
+    <input id="authEmail" type="email" autocomplete="username" />
+    <label for="authPassword">Password</label>
+    <input id="authPassword" type="password" autocomplete="current-password" />
+    <button id="authSignIn" class="primary">Sign In</button>
+    <div id="authError"></div>
+  </div>
+
+  <div id="main" style="display:none">
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="date">Assessment Date (optional)</label>
+          <input id="date" type="date" />
+        </div>
+        <button id="startBtn" class="primary">Start Publishing</button>
+        <button id="cancelBtn" class="secondary" disabled>Cancel</button>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="n" id="statTotal">0</div><div class="l">Found</div></div>
+        <div class="stat"><div class="n" id="statPassed" style="color:#00c896">0</div><div class="l">Published</div></div>
+        <div class="stat"><div class="n" id="statFailed" style="color:#ff5555">0</div><div class="l">Failed</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <script type="module" src="dist/runner.js"></script>
+</body>
+</html>

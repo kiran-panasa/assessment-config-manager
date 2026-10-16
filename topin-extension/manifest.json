@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Assessment Config Manager — Topin Publisher",
+  "version": "1.0.0",
+  "description": "Publish NxtWave assessment sessions to Topin directly from your own logged-in browser — no local server to start.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://config.topin.tech/*",
+    "https://firestore.googleapis.com/*",
+    "https://identitytoolkit.googleapis.com/*",
+    "https://securetoken.googleapis.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Topin Publisher"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://config.topin.tech/*"],
+      "js": ["src/content-topin.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
