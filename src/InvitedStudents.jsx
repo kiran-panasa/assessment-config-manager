@@ -14,7 +14,7 @@ const COLS = [
   "Contest Date", "Time Slot", "Campus", "Unique Exam ID", "Invite",
   "User Assessment Link", "Config Link", "Details Link",
 ];
-const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
+const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
 
 function deriveUserLink(assessmentLink) {
   if (!assessmentLink) return null;
@@ -292,10 +292,10 @@ export default function InvitedStudents({ S, showToast }) {
     downloadCSV(
       t2Filtered.map(s => [
         s.assessmentTitle, s.dateOfAssessment, s.startTimeSlot, s.endTimeSlot,
-        s.uniqueExamId, s.exitPin, s.topinAssessmentId ?? "", s.publishStatus ?? "pending",
+        s.uniqueExamId, s.topinAssessmentId ?? "", s.publishStatus ?? "pending",
         s.viewAssessmentUrl ?? "", s.assessmentLink ?? "", s.viewDetailsUrl ?? "",
       ]),
-      ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],
+      ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],
       `unique-assessments${selectedDate ? `-${selectedDate}` : ""}.csv`
     );
   };
@@ -512,7 +512,6 @@ export default function InvitedStudents({ S, showToast }) {
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.endTimeSlot}</td>
                             <td style={{ ...S.td, fontSize: 11, color: "#3b82f6", fontFamily: "'DM Mono', monospace" }}>{s.uniqueExamId}</td>
                             <td style={{ ...S.td, textAlign: "center", fontWeight: 700, color: "#0f172a" }}>{sessionStudentCount.get(s.sessionKey) ?? 0}</td>
-                            <td style={S.td}><span style={{ ...S.badge("#ff9966"), fontFamily: "'DM Mono', monospace", letterSpacing: "0.2em", fontSize: 13 }}>{s.exitPin}</span></td>
                             <td style={{ ...S.td, fontSize: 11, color: "#3b82f6", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap" }}>{s.topinAssessmentId ? s.topinAssessmentId.slice(0, 8) + "…" : "—"}</td>
                             <td style={S.td}>{s.publishStatus === "published" ? <span style={S.badge("#00c896")}>Published</span> : s.publishStatus === "failed" ? <span style={S.badge("#ff5555")}>Failed</span> : <span style={S.badge("#555a7a")}>Pending</span>}</td>
                             <td style={{ ...S.td, whiteSpace: "nowrap" }}>{s.viewAssessmentUrl ? <a href={s.viewAssessmentUrl} target="_blank" rel="noreferrer" style={{ color: "#3b82f6", textDecoration: "none", fontSize: 11, fontFamily: "'DM Mono', monospace" }}>Config ↗</a> : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}</td>

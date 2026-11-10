@@ -5,6 +5,11 @@
 // Login/OTP is intentionally not handled here: the user is expected to already
 // be signed into Topin normally, the same way they'd use it by hand.
 
+// Exit PIN step disabled per request (2026-11-10) — skip straight to
+// Save & Next instead. setExitPin() below is kept intact; flip this back to
+// true to resume setting it.
+const EXIT_PIN_ENABLED = false;
+
 // ── Generic DOM-wait helpers ─────────────────────────────────────────────────
 
 function waitFor(findFn, timeoutMs, label) {
@@ -246,8 +251,8 @@ async function publishSession(session) {
   await setDateTimeField("bscd-start-date-time-input", session.dateOfAssessment, session.startTimeSlot);
   await setDateTimeField("bscd-end-date-time-input", session.dateOfAssessment, session.endTimeSlot);
 
-  // 8. Exit PIN
-  await setExitPin(session.exitPin);
+  // 8. Exit PIN — disabled, see EXIT_PIN_ENABLED at the top of this file.
+  if (EXIT_PIN_ENABLED) await setExitPin(session.exitPin);
 
   // 9. Save & Next -> Publish & Invite
   await clickWhenFound(/save\s*&\s*next/i, 30000, "Save & Next (Final Review)");

@@ -22,6 +22,10 @@ function broadcast(type, message, extra = {}) {
 // ── Browser launch config (module-level so /send-otp and runPublish share it) ──
 
 const UA          = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+// Exit PIN step disabled per request (2026-11-10) — skip straight to
+// Save & Next instead. Flip to true to resume setting it.
+const EXIT_PIN_ENABLED = false;
 const isHeadless  = process.env.HEADLESS !== "false";
 const browserArgs = process.platform === "linux"
   ? ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu","--single-process","--disable-accelerated-2d-canvas","--no-zygote"]
@@ -247,7 +251,10 @@ async function publishOneSession(page, session, assessments) {
 
   await setDateTimeField(page, "bscd-start-date-time-input", session.dateOfAssessment, session.startTimeSlot);
   await setDateTimeField(page, "bscd-end-date-time-input",   session.dateOfAssessment, session.endTimeSlot);
-  await setExitPin(page, session.exitPin);
+  // Exit PIN step disabled per request (2026-11-10) — skip straight to
+  // Save & Next. setExitPin() is kept intact above; flip EXIT_PIN_ENABLED
+  // back to true to resume setting it.
+  if (EXIT_PIN_ENABLED) await setExitPin(page, session.exitPin);
 
   await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click({ timeout: 30000 });
 

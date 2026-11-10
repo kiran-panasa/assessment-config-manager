@@ -296,6 +296,10 @@ async function waitForPageSettled(page, timeout = 15000) {
 
 const TOPIN_BASE_URL = 'https://config.topin.tech/';
 
+// Exit PIN step disabled per request (2026-11-10) — skip straight to
+// Save & Next instead. Flip to true to resume setting it.
+const EXIT_PIN_ENABLED = false;
+
 async function loginToTopin(page, mobile, otp) {
   broadcast("info", "Navigating to Topin…");
 
@@ -555,9 +559,13 @@ async function publishOneSession(page, session, assessments) {
   await setDateTimeField(page, 'bscd-end-date-time-input', session.dateOfAssessment, session.endTimeSlot);
   broadcast("info", "  End date/time set");
 
-  // ── 8. Exit PIN ───────────────────────────────────────────────────────────
-  await setExitPin(page, session.exitPin);
-  broadcast("info", "  Exit PIN set");
+  // ── 8. Exit PIN — disabled per request (2026-11-10); setExitPin() is kept
+  // intact below, just not called. Flip EXIT_PIN_ENABLED back to true to
+  // resume filling it before Save & Next.
+  if (EXIT_PIN_ENABLED) {
+    await setExitPin(page, session.exitPin);
+    broadcast("info", "  Exit PIN set");
+  }
 
   // ── 9. Save & Next → Publish page ────────────────────────────────────────
   await page.locator('button, a, [role="button"]').filter({ hasText: /save\s*&\s*next/i }).first().click({ timeout: 30000 });
