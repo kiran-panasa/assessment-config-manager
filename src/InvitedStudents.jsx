@@ -12,9 +12,9 @@ const T2_FILTER_INIT = { skill: "All", level: "All", startTimeSlot: "All", publi
 const COLS = [
   "Student Name", "NIAT ID", "Student UID", "Skill", "Level",
   "Contest Date", "Time Slot", "Campus", "Unique Exam ID", "Invite",
-  "User Assessment Link", "Config Link", "Details Link",
+  "User Assessment Link", "Config Link", "Exam pin & Exit Pin Link",
 ];
-const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
+const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","Topin ID","Publish Status","Config Link","User Assessment Link","Exam pin & Exit Pin Link"];
 
 function deriveUserLink(assessmentLink) {
   if (!assessmentLink) return null;
@@ -283,7 +283,7 @@ export default function InvitedStudents({ S, showToast }) {
         r.inviteStatus === "sent" ? "Sent" : r.inviteStatus === "failed" ? "Failed" : "Not Sent",
         r.userAssessmentLink ?? "", r.viewAssessmentUrl ?? "", r.viewDetailsUrl ?? "",
       ]),
-      ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite Status","User Assessment Link","Config Link","Details Link"],
+      ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite Status","User Assessment Link","Config Link","Exam pin & Exit Pin Link"],
       `invited-students${selectedDate ? `-${selectedDate}` : ""}.csv`
     );
   };
@@ -295,7 +295,7 @@ export default function InvitedStudents({ S, showToast }) {
         s.uniqueExamId, s.topinAssessmentId ?? "", s.publishStatus ?? "pending",
         s.viewAssessmentUrl ?? "", s.assessmentLink ?? "", s.viewDetailsUrl ?? "",
       ]),
-      ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"],
+      ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Topin ID","Publish Status","Config Link","User Assessment Link","Exam pin & Exit Pin Link"],
       `unique-assessments${selectedDate ? `-${selectedDate}` : ""}.csv`
     );
   };
@@ -589,7 +589,7 @@ export default function InvitedStudents({ S, showToast }) {
             )}
 
             <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 20, fontFamily: "'Inter', sans-serif" }}>
-              CSV must have columns: <strong>Unique Exam ID</strong>, Topin ID, User Assessment Link, Config Link, Details Link
+              CSV must have columns: <strong>Unique Exam ID</strong>, Topin ID, User Assessment Link, Config Link, Exam pin & Exit Pin Link
             </div>
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
@@ -696,7 +696,7 @@ export default function InvitedStudents({ S, showToast }) {
             )}
 
             <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 20, fontFamily: "'Inter', sans-serif" }}>
-              CSV must match the <strong>Invited Students</strong> table columns: Student Name, NIAT ID, Student UID, Unique Exam ID, Invite, User Assessment Link, Config Link, Details Link
+              CSV must match the <strong>Invited Students</strong> table columns: Student Name, NIAT ID, Student UID, Unique Exam ID, Invite, User Assessment Link, Config Link, Exam pin & Exit Pin Link
             </div>
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>

@@ -212,7 +212,7 @@ export default function AboutPage({ S }) {
               {[
                 ["User Assessment Link", "The student-facing link derived from the session's assessment link — the admin token parameter (?a_t=CLIENT) is stripped so the student sees a clean URL."],
                 ["TinyURL", "A shortened version of the User Assessment Link. Generated on demand via the TinyURL API. Click 'Generate TinyURLs' in the header to batch-generate for all sessions that don't have one yet."],
-                ["Config / Details Links", "Admin-only links back into the Topin platform — Config Link opens the assessment configuration page, Details Link opens the session analytics/details page."],
+                ["Config / Exam pin & Exit Pin Links", "Admin-only links back into the Topin platform — Config Link opens the assessment configuration page, Exam pin & Exit Pin Link opens the session analytics/details page."],
               ].map(([col, desc]) => (
                 <div key={col} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "14px 16px" }}>
                   <div style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 12, color: "#0f172a", marginBottom: 6 }}>{col}</div>

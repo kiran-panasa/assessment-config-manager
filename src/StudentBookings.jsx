@@ -28,7 +28,7 @@ const T1_COLS = [
   ["Status","status"],["Student UID","studentUid"],["Booked At","bookedAt"],
   ["Contest Link","contestLink"],["Classroom Details","classroomDetails"],
 ];
-const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","Topin ID","Publish Status","Config Link","User Assessment Link","Details Link"];
+const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","Topin ID","Publish Status","Config Link","User Assessment Link","Exam pin & Exit Pin Link"];
 const T3_COLS = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite"];
 
 const T1_FILTER_INIT = { skill:"All",skillLevel:"All",timeSlot:"All",campus:"All",batch:"All",inviteStatus:"All" };
