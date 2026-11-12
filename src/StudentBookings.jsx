@@ -18,7 +18,7 @@ const PAGE_SIZE = 20;
 // Exit PIN generation disabled per request (2026-11-10) — new sessions are
 // created without one. genPin() is kept intact; flip this back to true to
 // resume generating/assigning them.
-const EXIT_PIN_ENABLED = false;
+const EXIT_PIN_ENABLED = true;
 
 const T1_COLS = [
   ["Booking ID","bookingId"],["Student Name","studentName"],["NIAT ID","niatId"],
@@ -28,7 +28,7 @@ const T1_COLS = [
   ["Status","status"],["Student UID","studentUid"],["Booked At","bookedAt"],
   ["Contest Link","contestLink"],["Classroom Details","classroomDetails"],
 ];
-const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","Topin ID","Publish Status","Config Link","User Assessment Link","Exam pin & Exit Pin Link"];
+const T2_COLS = ["Assessment Title","Date","Start Time","End Time","Unique Exam ID","Students","EXIT PIN","Topin ID","Publish Status","Config Link","User Assessment Link","Exam pin & Exit Pin Link"];
 const T3_COLS = ["Student Name","NIAT ID","Student UID","Skill","Level","Contest Date","Time Slot","Campus","Unique Exam ID","Invite"];
 
 const T1_FILTER_INIT = { skill:"All",skillLevel:"All",timeSlot:"All",campus:"All",batch:"All",inviteStatus:"All" };
@@ -447,7 +447,7 @@ export default function StudentBookings({ S, showToast }) {
                 ))}
                 <div style={{ display:"flex",gap:8,alignItems:"flex-end",marginLeft:"auto" }}>
                   {t2AnyActive&&<button onClick={()=>{ setT2Filters(T2_FILTER_INIT); setT2Page(1); }} style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }}>Reset</button>}
-                  {t2Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>downloadCSV(t2Filtered.map(s=>[s.assessmentTitle,s.dateOfAssessment,s.startTimeSlot,s.endTimeSlot,s.uniqueExamId,sessionStudentCount.get(s.sessionKey)??0,s.topinAssessmentId??"",s.publishStatus??"pending",s.viewAssessmentUrl??"",s.assessmentLink??"",s.viewDetailsUrl??""]),T2_COLS,`unique-assessments${selectedDate?`-${selectedDate}`:""}.csv`)}>Download CSV</button>}
+                  {t2Filtered.length>0&&<button style={{ ...S.btn("secondary"),padding:"7px 14px",fontSize:12 }} onClick={()=>downloadCSV(t2Filtered.map(s=>[s.assessmentTitle,s.dateOfAssessment,s.startTimeSlot,s.endTimeSlot,s.uniqueExamId,sessionStudentCount.get(s.sessionKey)??0,s.exitPin,s.topinAssessmentId??"",s.publishStatus??"pending",s.viewAssessmentUrl??"",s.assessmentLink??"",s.viewDetailsUrl??""]),T2_COLS,`unique-assessments${selectedDate?`-${selectedDate}`:""}.csv`)}>Download CSV</button>}
                   <button disabled={!t2AnyActive} onClick={()=>openDeleteModal("sessions")} style={{ ...S.btn("danger"),padding:"7px 16px",fontSize:12,opacity:!t2AnyActive?0.35:1 }}>Delete {t2AnyActive?`${t2Filtered.filter(s=>s.publishStatus!=="published").length} records`:"…"}</button>
                 </div>
               </div>
@@ -465,6 +465,7 @@ export default function StudentBookings({ S, showToast }) {
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.endTimeSlot}</td>
                         <td style={{ ...S.td,fontSize:11,color:"#3b82f6",fontFamily:"'DM Mono',monospace" }}>{s.uniqueExamId}</td>
                         <td style={{ ...S.td,textAlign:"center",fontWeight:700,color:"#0f172a" }}>{sessionStudentCount.get(s.sessionKey)??0}</td>
+                        <td style={S.td}><span style={{ ...S.badge("#ff9966"),fontFamily:"'DM Mono',monospace",letterSpacing:"0.2em",fontSize:13 }}>{s.exitPin}</span></td>
                         <td style={{ ...S.td,fontSize:11,color:"#3b82f6",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap" }}>{s.topinAssessmentId?s.topinAssessmentId.slice(0,8)+"…":"—"}</td>
                         <td style={S.td}>{s.publishStatus==="published"?<span style={S.badge("#00c896")}>Published</span>:s.publishStatus==="failed"?<span style={S.badge("#ff5555")}>Failed</span>:<span style={S.badge("#555a7a")}>Pending</span>}</td>
                         <td style={{ ...S.td,whiteSpace:"nowrap" }}>{s.viewAssessmentUrl?<a href={s.viewAssessmentUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6",textDecoration:"none",fontSize:11,fontFamily:"'DM Mono',monospace" }}>Config ↗</a>:<span style={{ color:"#94a3b8",fontSize:12 }}>—</span>}</td>

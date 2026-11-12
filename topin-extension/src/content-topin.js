@@ -8,7 +8,7 @@
 // Exit PIN step disabled per request (2026-11-10) — skip straight to
 // Save & Next instead. setExitPin() below is kept intact; flip this back to
 // true to resume setting it.
-const EXIT_PIN_ENABLED = false;
+const EXIT_PIN_ENABLED = true;
 
 // ── Generic DOM-wait helpers ─────────────────────────────────────────────────
 

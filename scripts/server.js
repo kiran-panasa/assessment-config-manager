@@ -298,7 +298,7 @@ const TOPIN_BASE_URL = 'https://config.topin.tech/';
 
 // Exit PIN step disabled per request (2026-11-10) — skip straight to
 // Save & Next instead. Flip to true to resume setting it.
-const EXIT_PIN_ENABLED = false;
+const EXIT_PIN_ENABLED = true;
 
 async function loginToTopin(page, mobile, otp) {
   broadcast("info", "Navigating to Topin…");
