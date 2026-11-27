@@ -34,7 +34,7 @@ function parseCsvText(text) {
     topinAssessmentId: row.get("topin id"),
     assessmentLink:    row.get("user assessment link"),
     viewAssessmentUrl: row.get("config link"),
-    viewDetailsUrl:    row.get("details link"),
+    viewDetailsUrl:    row.get("exam pin exit pin link", "details link"),
     assessmentTitle:   row.get("assessment title"),
     dateOfAssessment:  row.get("date"),
   })).filter(r => r.uniqueExamId);
@@ -52,7 +52,7 @@ function parseStudentsCsvText(text) {
       inviteStatus:       rawInvite === "sent" ? "sent" : rawInvite === "failed" ? "failed" : "not sent",
       userAssessmentLink: row.get("user assessment link"),
       configLink:         row.get("config link"),
-      detailsLink:        row.get("details link"),
+      detailsLink:        row.get("exam pin exit pin link", "details link"),
     };
   }).filter(r => r.uniqueExamId || r.niatId || r.studentUid);
 }
